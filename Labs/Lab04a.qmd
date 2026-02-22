@@ -1,0 +1,341 @@
+---
+title: "Lab Assignment #4a"
+author: "Math 437 - Modern Data Analysis - Jason Soto"
+format: pdf
+editor: source
+---
+
+## Introduction
+
+In a [2020 article](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0233515), Murray et al. attempted to understand the relationship between a professor's research output and their perceived teaching effectiveness.
+
+To quantify perceived teaching effectiveness, they scraped [Rate My Professor](https://www.ratemyprofessors.com/) and calculated an "overall effectiveness" score (based on the data dictionary, this appears to just be the average star rating, on a scale from 1-5, from reviews posted between Spring 2010 and Fall 2017 semesters).
+
+An anonymized, processed dataset and accompanying data dictionary is [publicly available](https://github.com/murrayds/aa_rmp/tree/master/data); I've removed most of the research-related variables to shrink the size of the dataset and shared it with you on Canvas as *RateMyProfessor*.
+
+```{r}
+#| label: do this at the beginning of every lab file
+#| message: false
+#| warning: false
+here::i_am("Labs/Lab04a.qmd")
+
+# load packages
+library(ISLR2)
+library(car)
+
+# load data
+RateMyProfessor <- readr::read_csv(here::here("Data/RateMyProfessor.csv"))
+```
+
+In this and the next lab assignment, we will build increasingly complex models to understand what goes into a professor's RateMyProfessor rating.
+
+This lab assignment is worth a total of **15 points**.
+
+## Problem 1: Simple Linear Regression (6 pts total)
+
+### Part a (Code: 0.5 pts)
+
+Run the code in ISLR Lab 3.6.2. Put each chunk from the textbook in its own chunk.
+
+#### Solution
+
+```{r}
+#| label: Chunk 1 1a
+
+head(Boston)
+
+```
+
+```{r}
+#| label: Chunk 2 1a (Inferior)
+
+attach(Boston)
+lm.fit <- lm(medv ~ lstat)
+
+```
+
+```{r}
+#| label: Chunk 2 1a (Superior)
+
+lm.fit <- lm(medv ~ lstat, data = Boston)
+
+```
+
+```{r}
+#| label: Chunk 3 1a
+
+lm.fit
+
+summary(lm.fit)
+
+```
+
+```{r}
+#| label: Chunk 4 1a
+
+names(lm.fit)
+
+coef(lm.fit)      #safer than data$coefficients
+
+```
+
+```{r}
+#| label: Chunk 5 1a
+
+confint(lm.fit)
+
+```
+
+```{r}
+#| label: Chunk 6 1a
+
+predict(lm.fit, data.frame(lstat = (c(5, 10, 15))), interval = "confidence")
+
+predict(lm.fit, data.frame(lstat = (c(5, 10, 15))), interval = "prediction")
+
+```
+
+```{r}
+#| label: Chunk 7 1a
+
+plot(lstat, medv)
+abline(lm.fit, lwd = 3)
+abline(lm.fit, lwd = 3, col = "red")
+plot(lstat, medv, col = "red")
+plot(lstat, medv, pch = 20)
+plot(lstat, medv, pch = "+")
+plot(1:20, 1:20, pch = 1:20)
+
+```
+
+```{r}
+#| label: Chunk 8 1a
+
+par(mfrow = c(2, 2))
+plot(lm.fit)
+
+```
+
+```{r}
+#| label: Chunk 9 1a
+
+plot(predict(lm.fit), residuals(lm.fit))
+plot(predict(lm.fit), rstudent(lm.fit))
+
+```
+
+```{r}
+#| label: Chunk 10 1a
+
+plot(hatvalues(lm.fit))
+which.max(hatvalues(lm.fit))
+
+```
+
+### Part b (Code: 0.5 pts; Explanation: 1 pt)
+
+Let's start our investigation of the RateMyProfessor data by looking at the relationship between `overall` and `difficulty`, the average rating for professor difficulty (also on a 1-5 scale with this time 1 = easiest, 5 = hardest). Create a scatterplot to visualize this relationship. For now, don't worry about making it look nice or fixing labels.
+
+Write a short paragraph describing what you can tell from the scatterplot about `overall`, `difficulty`, and/or the relationship between the two variables. Aim for roughly 2-4 sentences and assume that the person reading your paragraph knows no statistical jargon (e.g., instead of saying "strong linear relationship", say something like "the points follow very close to a line").
+
+#### Solution
+```{r}
+#| label: Plot
+
+plot(RateMyProfessor$overall, RateMyProfessor$difficulty)
+
+```
+What I can tell about this data from the plot is that the easier the professor is, the better their review becomes, though it still varies in the right half, there are still many difficult professors with good reviews, so it funnels, with the little end on the left. We see a negative linear pattern. Long story short, good reviews will very, but the tougher you are, the chance of a worse review is more likely.
+
+
+### Part c (Code: 0.5 pts)
+
+Fit a simple linear regression model predicting `overall` from `difficulty`. Obtain the `summary` of the model and use it to write the equation of the least-squares line.
+
+#### Solution
+
+```{r}
+#| label: Linear Regression Model
+
+
+lm_simple <- lm(overall ~ difficulty, data = RateMyProfessor)
+summary(lm.fit)
+
+```
+yhat = 5.5617 - .6412(difficulty)
+
+
+### Part d (Explanation: 1 pt)
+
+Does the slope of the regression model make real-world sense with this data? If so, explain how to interpret it. If not, explain why not.
+
+#### Solution
+
+The slope does makes sense, a sort of resentment grows when a class or professor is difficult, so the slope of the difficulty should be negative, slowly bringing down the review of the professor based on difficulty.
+
+### Part e (Explanation: 1 pt)
+
+Does the intercept of the regression model make real-world sense with this data? If so, explain how to interpret it. If not, explain why not.
+
+#### Solution
+
+Kind of? The lowest difficulty is 1, so the highest possible score would technically be less than 5, the highest possible grade, and while reviews can match that, maybe true professor ranking can't? Not sure but the current regression model should be good enough to work.
+
+## Problem 2: Multiple Linear Regression (3.5 pts total)
+
+### Part a (Code: 0.5 pts)
+
+Run the code in ISLR Lab 3.6.3. Put each chunk from the textbook in its own chunk.
+
+#### Solution
+
+```{r}
+#| label: Chunk 1 2a
+
+lm.fit <- lm(medv ~ lstat + age, data = Boston)
+summary(lm.fit)
+
+```
+
+```{r}
+#| label: Chunk 2 2a
+
+lm.fit <- lm(medv ~ ., data = Boston)
+summary(lm.fit)
+
+```
+
+```{r}
+#| label: Chunk 3 2a
+
+library(car)
+vif(lm.fit)
+
+```
+
+```{r}
+#| label: Chunk 4 2a
+
+lm.fit1 <- lm(medv ~ . - age, data = Boston) # can do this instead but this lowkirkenuienly looks stupid and confuse lm.fit1 <- update(lm.fit, ~ . - age)
+summary(lm.fit1)
+
+```
+
+### Part b (Code: 0.5 pts)
+
+The `interest` variable represents the average student interest in the subject of the course (1 = "Low" interest; 5 = "It's My Life"). Note that this rating no longer exists on the website.
+
+Fit a multiple linear regression model predicting `overall` from `difficulty` and `interest`. Obtain the `summary` of the model and use it to write the equation of the least-squares line.
+
+#### Solution
+
+```{r}
+#| label: Multiple
+
+lm_indicators <- lm(
+  overall ~ difficulty + interest,
+  data = RateMyProfessor
+)
+
+summary(lm_indicators)
+
+```
+yhat = 3.4406 - .5304(difficulty) + .5171(interest)
+
+### Part c (Explanation: 1 pt)
+
+Notice that the slope corresponding to the `difficulty` variable has a different value in the simple linear regression model and the multiple linear regression model from Part b.
+
+How should we interpret the slope corresponding to `difficulty` in this new model?
+
+#### Solution
+
+I believe this can be interpreted the same way, the reason for the less negatively effecting slope value though is because we added interest into the equation, adding more context, voice, and power to yhat's final value.
+
+### Part d (Code: 0.5 pts; Explanation: 1 pt)
+
+Does your interpretation from Part c actually make sense given the collected data? Support your answer by using the `vif` function and interpreting the output.
+
+#### Solution
+
+```{r}
+#| label: vif
+
+vif(lm_indicators)
+
+```
+I assume my interpretation is correct, considering how well they work with each other, having vif values very close to 1
+
+## Problem 3: Indicator Variables
+
+### Part a (Code: 0.5 pts)
+
+Run the code in ISLR Lab 3.6.6. Put each chunk from the textbook in its own chunk.
+
+#### Solution
+
+```{r}
+#| label: Chunk 1 3a
+
+head(Carseats)
+
+```
+
+```{r}
+#| label: Chunk 2 3a
+
+lm.fit <- lm(Sales ~ . + Income:Advertising + Price:Age, data = Carseats)
+
+summary(lm.fit)
+
+```
+
+```{r}
+#| label: Chunk 3 3a
+
+attach(Carseats)
+
+contrasts(ShelveLoc)
+
+```
+### Part b (Code: 0.5 pts)
+
+Using the RateMyProfessor dataset, fit a linear model predicting the overall rating of a professor (`overall`) from the difficulty rating (`difficulty`), chili pepper rating (`hotness`), and rank (`rank`).
+
+Obtain the `summary` of the model and use it to write the equation of the least-squares line. 
+
+#### Solution
+
+```{r}
+#| label: Multilinear Model
+
+mlm <- lm(overall ~ difficulty + hotness + rank, data = RateMyProfessor)
+summary(mlm)
+  
+```
+yhat = 5.301 - .5878(difficulty) + .6364(hotness == "hot") - .0503(rank == "Associate Professor") - .0475(rank == "Professor")
+
+### Part c (Explanation: 1.5 pts)
+
+What are the reference levels for each categorical variable in the model from Part c? How do you know?
+
+#### Solution
+
+The reference level for hotness is "not hot" since the coefficient is given when professor is "hot". The next reference level is for rank, that is "Assistant Professor", using the same logic. That should be it since any other variable has a coefficient that it can affect.
+
+### Part d (Explanation: 2 pts)
+
+Holding difficulty constant, which of the following instructors would be predicted to have the highest overall rating? Which would be predicted to have the lowest overall rating? Explain your reasoning.
+
+* Attractive Assistant Professor
+* Attractive Associate Professor
+* Attractive Professor
+* Less-attractive Assistant Professor
+* Less-attractive Associate Professor
+* Less-attractive Professor
+
+#### Solution
+
+The highest overall rating should be the Assistant Professor. This because other 2 ranks have negative effects, while assistant has none at all in our least square lines. Attractive has positive effect, while chopped has none.
+
+The lowest overall rating should be the Less-Attractive Associate Professor. Using the same idea, no positive effect is given due to looks. Assistant professor also has the most negative impact due to its coefficient.

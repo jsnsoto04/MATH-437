@@ -1,0 +1,394 @@
+---
+title: "Simulation Activities: Indicator Variables and Interaction Effects"
+subtitle: "Math 437"
+format: html
+editor: source
+---
+
+## Simulating with Indicator Variables
+
+Let's simulate this model using one numerical and one categorical predictor:
+
+```{r}
+#| label: simulate multiple linear regression
+
+set.seed(141)
+x<- rnorm(500, mean = 5, sd = 3)
+group <- c(
+  rep("A", 100),
+  rep("B", 200),
+  rep("C", 200)
+)
+
+## Consistent slope in all 3 groups
+beta1 <- 2
+## Different intercepts in all 3 groups
+betaA <- -1
+betaB <- 1
+betaC <- 3
+
+# Build the true model (group == "?") = 1 or 0
+y <- betaA * (group == "A") + # intercept if group is A
+     betaB * (group == "B") + # intercept if group is B
+     betaC * (group == "C") + # intercept if group is C
+     beta1 * x +              # incorporate effect of x in the model
+     rnorm(500)               # random epsilon ~ N(0, 1)
+
+simdata_indicators <- data.frame(
+  y = y,
+  x = x,
+  group = group
+)
+
+```
+
+### Explaining the Simulation
+
+What is the true model relating x and y in Group A? Group B? Group C?
+
+In Group A, y = -1 + 2x + epsilon
+In Group B, y = 1 + 2x + epsilon
+In Group C, y = 3 + 2x + epsilon
+
+### Visualizing the Simulation
+
+```{r}
+#| label: visualize simulation
+
+# subset our data to each group
+A <- simdata_indicators[which(simdata_indicators$group == "A"), ]
+B <- simdata_indicators[which(simdata_indicators$group == "B"), ]
+C <- simdata_indicators[which(simdata_indicators$group == "C"), ]
+
+# get range of x & y
+xrange <- range(simdata_indicators$x) # min & max
+yrange <- range(simdata_indicators$y)
+
+plot(A$x, A$y, xlim = xrange, ylim = yrange, col = "green4")
+# group A in blue
+abline(a = betaA, b = beta1, col ="green4")
+points(B$x, B$y, col = "red")
+abline(a = betaB, b = beta1, col = "red")
+points(C$x, C$y, col = "blue")
+abline(a = betaC, b = beta1, col = "blue")
+
+
+```
+
+
+## Indicator Variables
+
+Notice that `group` is categorical. We would like to create a single linear regression model that incorporates the effect of group, but we can't multiply a group value by a slope and get a number out. Instead, R changes the `group` variable so that we can include it in the model:
+
+```{r}
+#| label: indicator variable in model
+
+lm_indicators <- lm(
+  y ~ x + group,
+  data = simdata_indicators
+)
+
+summary(lm_indicators)
+
+```
+
+### Interpreting the Output
+
+1. What do the variables `groupB` and `groupC` mean?
+
+groupB = 1 if group == "B", 0 otherwise
+groupC = 1 if group == "C", 0 otherwise
+
+groupA is defined by the result of them 2, any unrepresented indicator like groupA is referred to as the reference level or baseline.
+
+2. What is the reference level (baseline) for `group` in this model? Why?
+
+3. What is our least-squares regression equation?
+
+yhat = -.987 + 1.997(x) + 1.803(group == "B") + 4.03(group == "C")
+
+4. How do we interpret the slope corresponding to `groupB` in this model? What about `groupC`?
+
+Slope was set as 1 for B, why do we have 1.803 now?
+In groupA: yhat = -.987
+In groupB: yhat = -.987 + 1.803
+In groupC: yhat = -.987 + 4.03
+Slope corresponding to indicator variable: Change in predicted y when we change groups from the ref. level to group of interest (holding other predictors constant)
+
+### Changing the Reference Level
+
+To use a different reference level, we need to use the `relevel` function. However, this function only works on factor variables:
+
+```{r}
+#| label: use relevel
+
+simdata_indicators$group <- simdata_indicators$group |>
+  as.factor() |> # convert to a factor variable
+  relevel(ref = "B")
+
+```
+
+Notice what happens with the coefficients:
+
+```{r}
+#| label: compare coefficients
+
+lm_refB <- lm(
+  y ~ x + group,
+  data = simdata_indicators
+)
+
+summary(lm_refB)
+
+```
+
+1. Explain how we could compute the intercept and slope for the new model using the coefficients from the original model.
+
+## Interaction Effects
+
+```{r}
+#| label: simulate multiple linear regression with interaction
+
+set.seed(100)
+x1 <- rnorm(500, mean = 5, sd = 3)   # simulate from Normal
+x2 <- rpois(500, lambda = 5)   # simulate from Poison
+epsilon <- rnorm(500, mean = 0, sd = 5)
+
+beta0 <- 2 # intercept
+beta1 <- 3 # slope for x1
+beta2 <- 7 # slope for x2
+# at this point, mu_Y = 2 +3(X1) + 7(x2)
+beta3 <- -1
+
+y <- beta0 + beta1 * x1 + beta2 * x2 + beta3 * x1 * x2 + epsilon
+
+
+```
+
+### Explaining the Simulation
+
+1. What is the difference between a *main effect* and an *interaction effect*?
+all in notebook
+
+2. How do we interpret `beta1` in this model? What about `beta2`?
+beta1 is the change in mu given a 1 unit change in x1, holding x2 constant at 0. AND VICE VERSA
+
+3. How do we interpret `beta3` in this model?
+beta 3 represents the change in the slope of the regression line for y vs x1 when x2 increases by 1 AND VICE VERSA
+
+## Fitting a Linear Regression Model with an Interaction Effect
+
+An interaction effect is coded with a `:`
+
+```{r}
+#| label: interaction effect model 1
+
+simdata_interaction <- data.frame(
+  x1 = x1,
+  x2 = x2,
+  y = y
+)
+
+#this is the actual analysis done in lab
+lm_no_interaction <- lm(y ~ x1 + x2,                # no interaction effect
+                        data = simdata_interaction)
+summary(lm_no_interaction)
+
+lm_interaction <- lm(y ~ x1 + x2 + x1:x2,           # includes interaction effect between x1 and x2
+                        data = simdata_interaction)
+summary(lm_interaction)
+
+```
+
+### Interpreting the Output
+
+1. What is our least-squares regression equation?
+yhat = 4.58 + 2.50(x1) + 6.57(x2) + (-.91)(x1)(x2)
+
+2. How do we interpret the slope corresponding to `x1` in this model?
+When x1 increases by 1 unit, and x2 is held constant at 0, predicted y increases by 2.50 units.
+As x2 increases, the slope connecting x1 & y decreases, at some x2 value it will be 0, and then the x1-y relationship will be negative.
+
+3. What does it mean for the interaction term to have a negative slope?
+Antagonistic interaction effect - "Diminishing Returns"
+Synergistic Interaction Effect (If interaction slope>0) ("1+1=3")
+
+### Including Main and Interaction Effects in the Same Model
+
+```{r}
+#| label: main and interaction effects
+
+lm_interaction2 <- lm(
+  y ~ x1 * x2, # include x1, x2, and their interaction
+  data = simdata_interaction
+)
+
+summary(lm_interaction2)
+
+```
+
+## Quantitative-Qualitative Interactions
+
+We can look at the combined effect of a quantitative and categorical predictor on a quantitative response by showing the different categories in different colors on a scatterplot.
+
+```{r}
+#| label: simulated group interaction model
+
+set.seed(141)
+
+x1 <- rnorm(500, mean = 5, sd = 3)   # simulate from Normal
+group <- c(rep("A", 250), rep("B", 250))
+
+# true slope and intercept in group A
+beta0A <- 2
+beta1A <- 3
+
+# true slope and intercept in group B
+beta0B <- -3
+beta1B <- 5
+
+y <- numeric(500)    # empty vector of zeros
+
+# Group A
+y[1:250] <- beta0A + beta1A * x1[1:250] + epsilon[1:250]
+
+# Group b
+y[251:500] <- beta0B + beta1B * x1[251:500] + epsilon[251:500]
+
+simdata_group_interaction <- data.frame(
+  x1 = x1,
+  group = group,
+  y = y
+)
+
+```
+
+```{r}
+#| label: plot without color
+
+plot(y ~ x1, data = simdata_group_interaction)
+
+```
+
+
+```{r}
+#| label: plot with color
+
+colors <- c(
+  rep("magenta4", 250), # group A
+  rep("darkorange", 250)   # group B
+)
+
+plot(y ~ x1, data = simdata_group_interaction, col = colors)
+
+```
+
+Here's what the same plot looks like using the `ggplot2` package and adding the least-squares regression lines:
+
+```{r}
+#| label: interaction plot with ggplot2
+#| warning: false
+#| message: false
+
+library(ggplot2)
+ggplot( # set up the axes
+  data = simdata_group_interaction,
+  mapping = aes( # which variables map to which features of the plot
+    x = x1,            # means put x1 on y-axis
+    y = y,             # means put y on y-axis
+    color = group      # means put different groups in different colors
+    )
+) +                    # add to this plot
+  geom_point() +       # add points
+  scale_color_manual(  # change the colors
+    values = c(A = "magenta4", B = "darkorange")
+  ) +
+  geom_smooth(method = "lm", se = FALSE)
+
+```
+
+### Interpreting the Graphs
+
+What in these graphs suggests that there is an interaction effect?
+
+### Interpreting the Model
+
+Here's the actual linear regression model:
+
+```{r}
+#| label: group interaction model
+
+lm_group_interaction <- lm(
+  y ~ x1 * group, # main effects of x1 and group and their interactions
+  data = simdata_group_interaction
+)
+
+summary(lm_group_interaction)
+
+```
+
+1. How do we interpret the slopes corresponding to each main effect?
+When x1 increases by 1 unit, in group A, predicted y increases by 3.11 units.
+When group changes from A to B, and x1 is held constant at 0, predicted y decreases by 4.91 units.
+
+2. How do we interpret the slopes corresponding to each interaction effect?
+When group changes from A to B, the slope relating y &x1 increases by 1.89 units
+
+3. What would be the equation for predicting y from x in group A? What about in group B? Group C? How close did those equations come to the true model?
+yhat = 1.885 + 3.11(x1) - 4.91(group = "B") + 1.89(x1)(group = "B")
+yhat = 1.885 + 3.11(x1)   (when group = A)
+yhat = 1.885 + 3.11(x1) - 4.91 + 1.89(x1)   (when group =B)
+    = -3.025 + 5(x1)
+
+### Changing the Reference Level
+
+```{r}
+#| label: new reference level group interaction
+
+simdata_group_interaction$group <- 
+  as.factor(simdata_group_interaction$group) |>
+  relevel(ref = "B")   # main effects of x1 and group and their interaction
+
+lm_group_interaction2 <- lm(
+  y ~ x1 * group, # main effects of x1 and group and their interactions
+  data = simdata_group_interaction
+)
+
+summary(lm_group_interaction2)
+
+```
+
+Can you reconstruct the same equations for the three groups out of this model?
+
+## Checking for Quantitative-Quantitative Interactions
+
+The easiest way is to turn one of the quantitative variables into a categorical variable by *binning* it like you would in a histogram.
+
+```{r}
+#| label: bin x2
+
+simdata_interaction$x2_group <- cut(
+  x2,
+  breaks = c(-1, 5, 10, 15)
+)
+
+table(simdata_interaction$x2_group)
+
+```
+
+```{r}
+#| label: interaction plot with ggplot2 - 2
+
+ggplot(
+  data = simdata_interaction,
+  mapping = aes(
+    x = x1,
+    y = y,
+    color = x2_group
+  )
+) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE)
+
+```
+

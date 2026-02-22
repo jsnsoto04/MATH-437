@@ -1,0 +1,565 @@
+---
+title: "Simulation Activity: Multiple Linear Regression"
+subtitle: "Math 437"
+format: html
+editor: source
+---
+
+## Simulating Multiple Linear Regression
+
+The form of the population regression model is:
+
+$$
+\mu_Y = \beta_0 + \beta_1 x_1 + \beta_2 x_2 + \ldots + \beta_p x_p
+$$
+
+$$
+y_i = \mu_{Y| x_1 = x_{i1}, \ldots, x_p = x_{ip}} + \epsilon_i
+$$
+
+Let's simulate this model using two numerical predictors:
+
+```{r}
+#| label: simulate multiple linear regression
+
+set.seed(282)
+x1 <- rnorm(500, mean = 5, sd = 3) # simulate from normal
+x2 <- rpois(500, lambda = 5) # simulate from Poisson
+epsilon <- rnorm(500, mean = 0, sd = 5)
+
+beta0 <- 2
+beta1 <- 4
+beta2 <- -3
+
+y <- beta0 + beta1 * x1 + beta2 * x2 + epsilon
+
+simdata <- data.frame(
+  y, x1, x2
+)
+```
+
+```{r}
+#| label: look at simdata
+
+pairs(simdata)
+```
+
+Our regression line for the sample is of the form:
+
+$$
+\hat{y} = b_0 + b_1 x_1 + b_2 x_2 + \ldots + b_p x_p
+$$
+
+Our goal is to find the values of $b_j$ that minimize the residual sum of squares,
+
+$$
+RSS = \sum_{i = 1}^n (y_i - \hat{y}_i)^2
+$$
+
+or, equivalently, minimize the mean squared error,
+
+$$
+MSE = \frac{1}{n} \sum_{i = 1}^n (y_i - \hat{y}_i)^2
+$$
+
+Let's investigate what this actually looks like. Here I'm going to hold `b0` fixed and we'll see how MSE varies with `b1` and `b2`:
+
+```{r}
+#| label: double for loop
+
+b0 <- 2 # make it = beta0 for now
+b1_grid <- seq(3.5, 4.5, by = 0.01)
+b2_grid <- seq(-3.5, -2.5, by = 0.01)
+
+MSE_matrix <- matrix(
+  0,
+  nrow = length(b1_grid),
+  ncol = length(b2_grid)
+)
+
+for(i in seq_along(b1_grid)){
+  for(j in seq_along(b2_grid)){
+    yhat <- b0 + b1_grid[i]*x1 + b2_grid[j]*x2
+    residuals <- y - yhat
+    MSE_matrix[i,j] <- mean(residuals^2)
+  }
+}
+```
+
+We can plot this information using a contour plot:
+
+```{r}
+#| label: contour plot
+contour(
+  x = b1_grid,
+  y = b2_grid,
+  z = MSE_matrix,
+  xlab = "b1",
+  ylab = "b2"
+)
+```
+
+### Check Your Knowledge
+
+What do each of the ellipses represent on this plot? What do the numbers mean? 
+
+## Fitting the Least-Squares Model with `lm`
+
+```{r}
+#| label: fit model with lm
+
+lm1 <- lm(
+  y ~ x1 + x2,          # formula response ~ predictors
+  data = simdata
+)
+
+print(lm1)
+
+```
+
+```{r}
+#| label: Summary
+
+summary(lm1)
+
+```
+
+
+### Check Your Knowledge: Coefficients
+
+```{r}
+#| label: coefficients
+
+model_coefficients <- coef(lm1)
+print(model_coefficients)
+
+```
+Predicted y-value when BOTH x1 & x2 are 0 is .88
+For each 1-unit increase in x1 (assuming x2 stays constant), the predicted y-value goes up 4.12
+
+How do we interpret each of these coefficients? Where are they reported in the `summary`?
+
+### Check Your Knowledge: R-Squared
+
+```{r}
+#| label: R-squared
+
+summary(lm1)$r.squared
+
+```
+
+How do we interpret this number? Where is it reported in the `summary`?
+
+## Making Predictions with `lm`
+
+```{r}
+#| label: predict
+
+predict(lm1)
+# gives the fitted values for the sample data passed in
+
+```
+
+### Food for Thought
+
+What are these numbers?
+
+## Making Predictions for New Data Values
+
+```{r}
+#| label: new sim data for predictions
+
+# this data will usually (in the future) be a subset of the original data, "held out" from fitting the model
+#we will NOT arbtrarily make up numbers here!!!
+new_sim_data <- data.frame(
+  x1 = c(0, 4, 8),
+  x2 = c(5, 8, 2)
+)
+
+
+predict(
+  lm1,
+  newdata = new_sim_data
+)
+# predict is finicky
+# the variables/column names in newdata need to exactly match the variables/column names in the original dataset used to fit the model
+#if we transform x vars. before putting them in the model, we have to transform the exact same way in the new data
+
+```
+
+A better way to do this is to add the predictions directly to the data frame. Here is one way to do that; we will learn better ones later in the class:
+
+```{r}
+#| label: add predictions to df
+
+# Whats up, if you doin this in may, you doin sum wrong, lowkirkenuienly ofc
+lm1_predictions <- data.frame(
+  x1 = new_sim_data$x1,
+  x2 = new_sim_data$x2,
+  .pred = predict(lm1, newdata = new_sim_data)
+)
+
+```
+
+
+We can get also confidence intervals for $\mu_{Y}$ and prediction intervals for $y$ by adding additional arguments to the `predict` function.
+
+```{r}
+#| label: confidence and prediction intervals
+
+CI <- predict(
+  lm1,
+  newdata = new_sim_data,
+  interval = "confidence"
+)
+
+PI <- predict(
+  lm1,
+  newdata = new_sim_data,
+  interval = "prediction"
+) # n x 3 matrix, where n = number of rows in newdata
+
+print(CI)
+print(PI)
+# first column for each is the same
+# PI has more range due to more wiggle room
+
+```
+
+### Food for Thought
+
+What's the difference between these two intervals? Why is the prediction interval wider?
+
+## Assumptions of the Model
+
+Inherent in the equations representing the population model are 6 assumptions:
+
+1. There is a linear relationship between the response variable, $y$, and each predictor variable $x_j$ in the model
+2. $\epsilon_i$ are independent and identically distributed random variables...
+3. ...from a normal distribution...
+4. ...with constant mean 0 independent of the values of $x_1, \ldots, x_p$...
+5. ...and constant variance $\sigma^2$ independent of the values of $x_1, \ldots, x_p$.
+6. There are no strong linear relationships between any of the $x_j$'s 
+
+
+## Checking Linearity
+
+When we have a multiple regression model, we can investigate linearity by looking at the top (usually) row of the scatterplot matrix. But sometimes it's unclear or difficult to communicate.
+
+A better way of checking linearity is with a residual plot.
+
+```{r}
+#| label: residual plot
+
+plot(lm1, which = 1)   # there are many different plots that can come out of plot() when a lm is passed in
+
+```
+
+### Check Your Knowledge: Residual Plot Axes
+
+What does the horizontal axis represent on this plot? What does the vertical axis represent?
+
+### Obviously Violated Linearity Assumption
+
+The chunk below simulates a dataset in which the linearity assumption is obviously violated.
+
+```{r}
+#| label: bad linearity assumption
+
+y_nonlinear <- beta0 + beta1 * x1 + beta2 * x2^2 + epsilon
+
+simdata_nonlinear <- data.frame(
+  y = y_nonlinear, x1, x2
+)
+
+lm_nonlinear <- lm(y ~ x1 + x2, data = simdata_nonlinear)
+plot(lm_nonlinear, which = 1)
+```
+
+What in this plot suggests that the linearity assumption is not met?
+
+## Checking Independent Error Terms
+
+### Obviously Violated Independence Assumption
+
+Usually this happens when our observations are recorded at adjacent space and time points.
+
+```{r}
+#| label: bad independence assumption
+
+set.seed(28)
+epsilon_cor <- arima.sim(
+  model = list(ar = 0.9), # true correlation of 0.9 between adjacent residuals
+  n = 500,
+  sd = 5)
+
+simdata_cor <- data.frame(
+  x1, x2,
+  y = beta0 + beta1 * x1 + beta2 * x2 + epsilon_cor
+)
+
+lm_cor <- lm(y ~ x1 + x2, data = simdata_cor)
+```
+
+```{r}
+#| label: correlation not obvious from residual plot
+
+plot(lm_cor, which = 1)
+
+```
+
+```{r}
+#| label: can plot by observation number
+
+par(mfrow = c(1, 2))     # 1 x 2 matrix of plots, filled in row-wise
+# not giving a y-vector, will assume the vector is the y-vector and plot against the index number
+plot(lm1$residuals, type = "l", main = "uncorrelated")
+plot(lm_cor$residuals, type = "l", main = "correlated")
+
+```
+
+The autocorrelation function (ACF) can also be plotted to check for correlated residuals:
+
+```{r}
+#| label: can plot ACF
+
+par(mfrow = c(1, 2))
+acf(lm1$residuals, main = "uncorrelated")    # correlation between x[i] and x[i-l]
+acf(lm_cor$residuals, main = "correlated")
+
+
+
+```
+
+What do you see in the autocorrelation plot on the right that suggests the error terms are correlated, compared to the left autocorrelation plot of uncorrelated residuals?
+
+## Checking Normality
+
+This is the assumption that we can most easily get away with violating (often due to asymptotics), but we still don't want it to be too egregiously violated. We can check normality using a normal probability plot, or normal quantile plot, or normal q-q plot.
+
+```{r}
+#| label: normal q-q plot
+
+plot(lm1, which = 2)
+
+# y-axis plots z-scores for residuals
+# x-axis technically plots z-scores for residuals but comes out a diff way, 335, take prob and turn it to z-score
+
+```
+
+### Check Your Knowledge: Q-Q Plot Axes
+
+What does the horizontal axis represent on this plot? What does the vertical axis represent?
+
+### Check Your Knowledge: Q-Q Plot Interpretation
+
+What in this plot suggests that the normality assumption is met?
+
+### Obviously Violated Normality Assumption
+
+The chunk below simulates a dataset in which the normality assumption is obviously violated.
+
+```{r}
+#| label: bad normality assumption
+
+set.seed(28)
+epsilon_exp <- rexp(500, rate = 1) - 1 # still mean 0
+
+y_exp <- beta0 + beta1 * x1 + beta2 * x2 + epsilon_exp
+
+simdata_nonnormal <- data.frame(
+  y = y_exp, x1, x2
+)
+
+lm_nonnormal <- lm(y ~ x1 + x2, data = simdata_nonnormal)
+
+plot(lm_nonnormal, which = 2)
+```
+
+What in this plot suggests that the normality assumption is egregiously violated?
+
+## Checking Homoscedasticity (Constant Variance)
+
+My rule of thumb is that the range of residuals should be roughly constant across the entire horizontal axis of the residual plot. A "funnel" shape indicates that the residuals tend to be more spread out at some fitted values than others, which is a problem for inference and a problem for evaluating predictive accuracy.
+
+```{r}
+#| label: recheck residual plot
+
+plot(lm1, which = 1)
+
+```
+
+We can also look at the Scale-Location plot if it's unclear:
+
+```{r}
+#| label: scale-location plot
+
+# ?plot.lm
+plot(lm1, which = 3)
+
+```
+
+### Check Your Knowledge
+
+What does the horizontal axis represent on this plot? What does the vertical axis represent?
+
+### Obviously Violated Homoscedasticity Assumption
+
+```{r}
+#| label: bad constant variance assumption
+
+set.seed(28)
+y_ncv <- beta0 + beta1 * x1 + beta2 * x2 + 
+  rnorm(500, mean = 0, sd = pmax(2, x1))
+
+simdata_ncv <- data.frame(
+  y = y_ncv, x1, x2
+)
+
+lm_ncv <- lm(y ~ x1 + x2, data = simdata_ncv)
+
+plot(lm_ncv, which = 1)
+
+```
+
+What in this plot suggests that the homoscedasticity assumption is violated?
+
+## Checking for Collinearity
+
+To check for collinearity, we can obtain the correlation matrix:
+
+```{r}
+#| label: check for collinearity
+
+cor(simdata)  # make sure that every column in simdata is numericic
+
+```
+
+
+### Obvious Collinearity
+
+```{r}
+#| label: collinearity
+
+set.seed(28)
+x1_new <- rnorm(500, mean = x2, sd = 1)
+y_collinear <- beta0 + beta1 * x1_new + beta2 * x2 + epsilon
+
+simdata_collinear <- data.frame(
+  y = y_collinear, x1 = x1_new, x2 = x2
+)
+
+with(simdata_collinear, cor(x1, x2))
+
+lm_collinear <- lm(y ~ x1 + x2, data = simdata_collinear)
+```
+
+```{r}
+#| label: compare scatterplot matrices
+
+pairs(simdata)
+pairs(simdata_collinear)
+
+```
+
+The correlation between x1 and x2 is now about 0.9. Is this a big deal? We can check the variance inflation factor (VIF):
+
+```{r}
+#| label: vif
+library(car) # contains vif function
+
+vif(lm1)
+
+```
+
+```{r}
+#| label: vif for collinear model
+
+vif(lm_collinear)
+
+```
+
+The bigger the VIF gets, the more problems we will have accurately estimating coefficients and their standard errors. In fact, when we have perfect collinearity, we get weird summary output from our model:
+
+```{r}
+#| label: simulate perfect collinearity
+
+simdata_perfect_collinearity <- data.frame(
+  x1,            # x1 and x2 vif is 1
+  x2,
+  x3 = 2*x1 - 3, # linear transformation of x1, can't event fit into func
+  y
+)
+
+lm_perfect_collinearity <- lm(
+  y ~ x1 + x2 + x3, 
+  data = simdata_perfect_collinearity
+)
+
+```
+
+
+```{r}
+#| label: compare coefficient estimates
+
+summary(lm_perfect_collinearity)
+vif(lm_perfect_collinearity)
+
+```
+
+
+### Multicollinearity
+
+Multicollinearity exists when collinearity exists between *linear combinations* of predictor variables, even if no individual pair of variables is problematically collinear.
+
+```{r}
+#| label: multicollinearity
+
+set.seed(28)
+x3 <- x1 + x2 + rnorm(500)
+beta3 <- 1
+y_multi <- beta0 + beta1 * x1_new + beta2 * x2 + beta3 * x3 + epsilon
+
+simdata_multi <- data.frame(
+  y = y_multi, x1, x2, x3
+)
+
+lm_multi <- lm(y ~ x1 + x2 + x3, data = simdata_multi)
+```
+
+Fit models with just two predictors and find the Variance Inflation Factor. Does the VIF suggest there is a problematic amount of correlation between `x1` and `x3`, or between `x2` and `x3`?
+
+```{r}
+#| label: x1 and x3 model
+
+lm_x1x3 <- lm(
+  y ~ x1 + x3,
+  data = simdata_multi
+)
+
+vif(lm_x1x3)
+```
+
+```{r}
+#| label: x2 and x3 model
+
+lm_x2x3 <- lm(
+  y ~ x2 + x3,
+  data = simdata_multi
+)
+
+vif(lm_x2x3)
+```
+
+Fit the model with all three predictors. What happened to the VIF? Why?
+
+```{r}
+#| label: three-predictor model
+
+vif(lm_multi)
+
+```
+
+
+
+

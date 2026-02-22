@@ -1,0 +1,260 @@
+---
+title: "Simulation Activity: Multiple Comparisons"
+subtitle: "Math 437"
+format: html
+editor: source
+---
+
+## Goals
+
+1. Estimate the Type I Error rate and power of a test
+2. Understand the difference between Family-Wise Error Rate and False Discovery Rate
+3. Investigate how these properties change depending on sample size and population distribution
+
+## Simulate the Data
+
+```{r}
+#| label: simulate the data
+
+n_tests <- 1000
+sample_size <- 10
+prop_true_H0 <- 0.5
+
+n_true_H0 <- floor(n_tests*prop_true_H0)
+n_false_H0 <- n_tests - n_true_H0
+
+mu0 <- 0
+sigma0 <- 1
+
+mu1 <- 1
+sigma1 <- 1
+
+set.seed(6)
+x_H0 <- matrix(
+  rnorm(sample_size*n_true_H0, mean = mu0, sd = sigma0),
+  nrow = sample_size,
+  ncol = n_true_H0
+  )
+x_H1 <- matrix(
+  rnorm(sample_size*n_false_H0, mean = mu1, sd = sigma1),
+  nrow = sample_size,
+  ncol = n_false_H0
+  )
+x <- cbind(x_H0, x_H1)
+```
+
+Add comments to the chunk above indicating what the code is doing. What does the final matrix `x` contain?
+
+*19-21, sets values, 21 is the how many H0 is actually gonna be true
+*23 & 24 gives us true and false H0, floor forces an integer
+*mu and sigmas are properties of dist. under H0 and H(alternative) = Ha
+*Seed is seed
+*x_H0 builds a matrix, rnorm generates random numbers based on distribution, with amount based off true H0, mean, and sd.
+Row is each obs, column is the true grouping?
+*x_H1 is the same but false
+*cbind does idk
+
+## A Single t-Test
+
+```{r}
+#| label: run a one-sample t-test on the first column of x
+
+t.test(x[,1], mu = mu0)
+
+```
+
+Do you reject the null hypothesis at significance level $\alpha = 0.05$? Why or why not?
+
+## Multiple t-Tests
+
+Three options here:
+
+1. Inside a `for` loop, run a t-test on each column and store the corresponding p-value in the corresponding index of a `p_values` vector.
+2. Write a function, `extract_p_value()`, to perform a t-test and extract the p-value, then `apply` the function over the columns of `x` and store the output in `p_values`.
+3. As Option 2, but using an anonymous (lambda) function instead of defining the function `extract_p_value` directly.
+
+```{r}
+#| label: multiple t-tests
+
+extract_p_value <- function(x, mu){
+  # x : a vector of data
+  # mu : the hypothesized value of mu under H0
+  return(t.test(x, mu = mu)$p.value)    # explicitly return p-value
+}
+
+p_values <- apply(
+  x,                 # matrix or data frame with the data
+  2,                 # dimension to apply over
+  extract_p_value,   # function to apply
+  mu = mu0           # other arguments to pass to the function
+  
+)
+
+```
+
+
+```{r}
+#| label: is H0 true
+
+H0_status <- c(
+  rep("H0 True", n_true_H0),
+  rep("H0 False", n_false_H0)
+)
+
+alpha <- 0.05
+
+H0_rejected <- ifelse(
+  p_values <= alpha,     # condition to evaluate
+  "Reject H0",           # what to return if TRUE : p-value <= alpha
+  "Fail to reject H0"    # what to return if FALSE: p-value > alpha
+)
+
+table(H0_rejected, H0_status)
+
+```
+
+### Food for Thought
+
+Estimate the following based on the table above.
+
+1. The probability of committing a Type I Error on an individual test
+    28/1000 or .028 or .056 based on just column
+2. The probability of committing any Type I Errors
+    1 (probability of committing any, as in at all, which is 100%)
+3. The power of the test
+    Power = P(reject H0 | some specific H1 true (mu = 1) )
+    About .8 (not sure how)
+4. The probability that a rejected null hypothesis will be a Type I Error
+    Power = P(Type 1 Error | reject H0 ) = 28/(407+28) = .06
+    False discovery Proportion = .064
+    (estimate of FDR)
+
+## Bonferroni Method
+
+The Bonferroni Method adjusts $\alpha$ by dividing by the total number of tests.
+
+```{r}
+#| label: Bonferroni Method
+
+alpha_bonf <- alpha/n_tests
+
+H0_status <- c(
+  rep("H0 True", n_true_H0),
+  rep("H0 False", n_false_H0)
+)
+
+alpha <- 0.05
+
+H0_rejected <- ifelse(
+  p_values <= alpha_bonf, # condition to evaluate
+  "Reject H0",            # what to return if TRUE : p-value <= alpha
+  "Fail to reject H0"     # what to return if FALSE: p-value > alpha
+)
+
+table(H0_rejected, H0_status)
+
+```
+
+Did we make any Type I Errors? What proportion of false null hypotheses were rejected?
+
+## Holm's Step-Down Method
+
+Holm's Step-Down Method compares the p-values sequentially to increasing significance levels, and stops as soon as one p-value is found to be non-significant. Let's see how this works.
+
+```{r}
+#| label: holm method
+
+# Step 1: Define the desired FWER
+FWER <- .05
+# Step 2: Order the p-values from smallest to largest
+p_values_sorted <- sort(p_values, decreasing = FALSE)
+# Step 3: Test the p-values at increasing significance levels until one is non-significant
+holm_decisions <- rep("Fail to Reject H0", n_tests)
+
+for(j in 1:n_tests){
+  # Compare the j^th ordered p-value to the j^th ordered sig. level
+  new_sig_level <- FWER/(n_tests + 1 - j)
+  if(p_values_sorted[j] <= new_sig_level){
+    # Find the correct null hypothesis to reject
+    holm_decisions[which(p_values == p_values_sorted[j])] <- "Reject H0"
+  } else {
+    # If not rejected, STOP and do not reject any other H0
+    break
+  }
+}
+
+table(holm_decisions, H0_status)
+
+```
+
+Did we make any Type I Errors? What proportion of false null hypotheses were rejected?
+No, 487/413 false null hypotheses were rejected
+
+### Food for Thought
+
+Does it really matter whether we use Holm's method or the Bonferroni method when we have a truly large (here 1000) number of tests? Why or why not?
+
+## False Discovery Rate
+
+Let's see if the Benjamini-Hochberg method can do any better. The Benjamini-Hochberg method gives up on controlling the family-wise error rate and instead tries to control the false discovery rate.
+
+```{r}
+#| label: B-H method
+
+# Step 1: Define the desired FWER
+FDR <- .10                       # No consensus on what to use, 10% and 20% are common
+# Step 2: Order the p-values from smallest to largest
+p_values_sorted <- sort(p_values, decreasing = FALSE)
+# Step 3: Test the p-values at increasing significance levels until one is non-significant
+BH_decisions <- rep("Fail to Reject H0", n_tests)
+
+for(j in 1:n_tests){
+  # Compare the j^th ordered p-value to the j^th ordered sig. level
+  new_sig_level <- FDR*j/n_tests
+  if(p_values_sorted[j] <= new_sig_level){
+    # Find the correct null hypothesis to reject
+    BH_decisions[which(p_values == p_values_sorted[j])] <- "Reject H0"
+  } else {
+    # If not rejected, STOP and do not reject any other H0
+    break
+  }
+}
+
+table(BH_decisions, H0_status)
+
+```
+
+Did we make any Type I Errors? If so, what is the false discovery proportion? What proportion of false null hypotheses were rejected?
+
+## Further Exploration
+
+Copy all of the code to simulate the data, run the t-tests, and apply corrections to control the FWER or FDR. With a partner or two, change the situation under which we are performing the tests:
+
+1. Change the value of `mu0` and/or `mu1` to make the population distributions closer or further apart
+2. Change the value of `sigma0` and/or `sigma1` to either change the variability in both population distributions or give them different variability
+3. Change the distribution entirely, e.g., using `rexp` to simulate from an exponential distribution or `rpois` to simulate from a Poisson distribution.
+4. Change the sample size - to make the code and principles work we need to keep this the same under both $H_0$ and $H_1$
+5. Change the proportion of samples for which $H_0$ is true
+
+```{r}
+#| label: simulate data again
+
+
+```
+
+```{r}
+#| label: Bonferroni method on new simulated data
+
+```
+
+```{r}
+#| label: Holm method on new simulated data
+
+```
+
+```{r}
+#| label: B-H method on new simulated data
+
+```
+
+What do you notice about the effect of your modification? If you have time, try a couple of different modifications. 

@@ -1,0 +1,367 @@
+---
+title: "Simulation Activities: Linear Regression with Basis Function Expansions"
+subtitle: "Math 437"
+format: html
+editor: source
+---
+
+## Simulating a Nonlinear Function of x
+
+```{r}
+#| label: simulate data
+
+set.seed(105)
+x <- rnorm(500, mean = 5, sd = 3) # simulate from normal
+epsilon <- rnorm(500, mean = 0, sd = 1)
+
+beta0 <- 2
+beta1 <- -3
+
+y <- beta0 + beta1 * exp(-0.5*x) + epsilon
+
+simdata <- data.frame(
+  y, x
+)
+
+plot(y ~ x, data = simdata)
+```
+
+It's pretty clear from what I've simulated that we have a nonlinear, saturating function here. We can see clear issues in our residual plot:
+
+```{r}
+#| label: linear model
+
+lm_linear <- lm(y ~ x, data = simdata)
+plot(lm_linear, which = 1)
+
+```
+
+The idea behind basis function expansion is to create a set of *new* predictors using transformations $b_j(x)$. We can then run multiple linear regression models with these new predictors, allowing us to capture nonlinear relationships within the standard linear regression framework.
+
+## Polynomial Regression
+
+The basis functions for polynomial regression are of the form $b_j(x) = x^j$. Essentially, think of this as estimating the  Taylor series expansion of the unknown $f(x)$.
+
+There are a few different ways we can specify a polynomial regression model in R. We'll use a quadratic (degree 2) polynomial to demonstrate.
+
+```{r}
+#| label: polynomial regression with quadratic term a
+
+lm_quadratic_a <- lm(
+  y ~ x + I(x^2),      # I func tells to R to square each element of x
+  data = simdata
+)
+
+summary(lm_quadratic_a)
+
+```
+
+```{r}
+#| label: polynomial regression with quadratic term b
+
+lm_quadratic_b <- lm(
+  y ~ poly(x, 2),      # Poly tells R to
+  data = simdata
+)
+
+summary(lm_quadratic_b)
+
+```
+
+
+```{r}
+#| label: polynomial regression with quadratic term c
+
+lm_quadratic_c <- lm(
+  y ~ poly(x, 2, raw = TRUE),      # raw recovers original coefficients, we want it RAW ... pause
+  data = simdata
+)
+
+summary(lm_quadratic_c)
+
+```
+
+### Food for Thought
+
+1. Which two models produce the same regression coefficients? How do we write out the equation for those linear regression models? 
+B & C
+yhat = -.853 + .833x + (-.058)x^2
+Problem: When x goes up by one unit, x^2 probably also changes!
+
+2. Why does the other model produce different regression coefficients? What is the advantage of using this model instead?
+
+
+#### Math 307 Note About Question 2
+
+In all three models we are telling R to search over the space of all polynomials of degree 2, that is, minimize MSE over all functions of the form $f(x) = b_0 + b_1 x + b_2 x^2$. We typically think of ${1, x, x^2}$ as spanning this space. But we can also think of this space as being spanned by ${1, p_1(x), p_2(x)}$ where the $p_j(x)$ are polynomials of degree $j$ chosen to ensure the resulting new predictors are uncorrelated.
+
+```{r}
+#| label: check correlations
+
+cor(x, x^2)
+cor(poly(x,2))
+
+```
+
+Let's see what the new regression "line" looks like.
+
+```{r}
+#| label: plot quadratic regression line
+
+# floor rounds to integer below, ceiling rounds to integer above
+xlims <- seq(floor(min(x)), ceiling(max(x)), by = .1)
+new_x <- data.frame(
+  x = xlims
+)
+
+lm_linear_predictions <- predict(
+  lm_linear,
+  newdata = new_x
+)
+
+lm_quadratic_predictions <- predict(
+  lm_quadratic_b,
+  newdata = new_x
+)
+
+plot(y ~ x, data = simdata)   # original data to fir a model to
+lines(xlims, lm_linear_predictions, col = "red", lwd = 2)
+lines(xlims, lm_quadratic_predictions, col = "blue", lwd = 2)
+
+```
+
+It's definitely doing better. But we know (because we simulated the function) that the true function is saturating at high values of x, not decreasing. Our predictions start to become absurd when we get further away from our data:
+
+```{r}
+#| label: absurd quadratic regression
+
+xlims2 <- seq(floor(min(x)) - 5, ceiling(max(x)) + 5, by = .1)
+new_x2 <- data.frame(x = xlims2)
+
+lm_quadratic_predictions2 <- predict(
+  lm_quadratic_b,
+  newdata = new_x2
+)
+
+plot(y ~ x, data = simdata, xlim = c(-5, 20))   # original data to fir a model to
+lines(xlims, lm_linear_predictions, col = "red", lwd = 2)
+lines(xlims2, lm_quadratic_predictions2, col = "blue", lwd = 2)
+
+```
+
+By increasing the degree of the polynomial, we gain increasing flexibility to model the true $f(x)$ around our data.
+
+```{r}
+#| label: degree 5 polynomial
+
+lm_quintic <- lm(
+  y ~ poly(x, 5),
+  data = simdata
+)
+
+lm_quintic_predictions <- predict(
+  lm_quintic,
+  newdata = new_x2
+)
+
+
+plot(y ~ x, data = simdata, xlim = c(-5, 20))   # original data to fir a model to
+lines(xlims2, lm_quadratic_predictions2, col = "blue", lwd = 2)
+lines(xlims2, lm_quintic_predictions, col = "darkgreen", lwd = 2)
+
+```
+
+The obvious tradeoff is that our predictions become increasingly absurd outside the support of our data.
+
+Bias - Variance Tradeoff
+High Bias models are "too simple" to adequately model the true f(x), BUT they are fairly resistant to small changes in the data, meaning they may be better for extrapolation.
+High Variance models are flexible enough to approximate true f(x), BUT they are extremely sensitive to small changes in the data.
+
+## Spline Regression
+
+Spline functions are primarily in the `splines` package. Cubic B-splines (the most common type of cubic spline) use the `bs` function:
+
+```{r}
+#| label: cubic splines with bs
+library(splines)
+
+spline_basis <- with(simdata, 
+                     bs(x, knots = c(0, 5, 10), intercept = TRUE))
+
+# DO NOT COPY AND RUN
+# print(spline_basis)
+# COPY AND RUN THIS INSTEAD
+str(spline_basis)
+
+# "Boundary.knots" = min(x) & max(x) unless otherwise specified
+# FALSE = include on intercept in the B-Spline Basis
+# first line tell us 7 degrees of freedom ([1:500, 1:7])
+```
+
+This creates 5 knots: three interior knots at 0, 5, and 10; and two boundary knots at the minimum and maximum values in the dataset.
+
+We can use `bs` directly in the right-hand side of the formula:
+
+```{r}
+#| label: lm with splines
+
+lm_splines <- lm(
+  y ~ bs(x, knots = c(0, 5, 10)),
+  data = simdata
+)
+
+summary(lm_splines)
+
+```
+
+Let's compare the spline regression model to the polynomial regression models:
+
+```{r}
+#| label: plot splines vs polynomial
+
+lm_splines_predictions <- predict(
+  lm_splines,
+  newdata = new_x2
+)
+
+plot(y ~ x, data = simdata, xlim = c(-5, 20))   # original data to fir a model to
+lines(xlims2, lm_quadratic_predictions2, col = "blue", lwd = 2)
+lines(xlims2, lm_quintic_predictions, col = "darkgreen", lwd = 2)
+lines(xlims2, lm_splines_predictions, col = "darkorange", lwd = 2)
+
+```
+
+### Food for Thought
+
+1. Why do you think we get the warning message?
+We got this because 
+
+2. You would think this code would create 3 interior knots, but it doesn't! What does it actually create?
+
+One not at 3 \/
+
+```{r}
+#| label: splines with a single number for knots
+
+bad_spline_basis <- with(simdata,
+                         bs(x, knots = 3)
+)
+
+str(bad_spline_basis)
+
+```
+
+### Specifying an Arbitrary Number of Knots
+
+To create the right number of interior knots without specifying *where* those knots are, use the `df` argument. If you want to use $K$ interior knots, use `df = 4+K` if you want the spline basis to include intercept terms and `df = 3+K` otherwise. For example:
+
+```{r}
+#| label: correctly specified splines
+
+good_splice_basis <- with(simdata,
+                          bs(x, df = 6)) # for 3 knots with intercept = FALSE
+
+str(good_splice_basis)
+
+# knots were chosen at concentrations of data, Q1, median, & Q3
+
+```
+
+Let's check that the knots are in the same location in both bases. Where does R place the knots?
+
+```{r}
+#| label: check knots for 2a
+
+good_splice_basis2 <- with(simdata,
+                          bs(x, df = 7, intercept = TRUE))
+# Need extra df because intercept = TRUE
+
+str(good_splice_basis2)
+
+```
+
+```{r}
+#| label: check knots for 2b
+
+```
+
+You can use the `quantile` function to specify the knots R chooses by default:
+
+```{r}
+#| label: knots with quantiles
+
+K <- 5 # K = number of knotts berry farm
+
+quantile_splice_basis <- with(simdata,
+                          bs(x, knots = quantile(x,
+                          seq(
+                            1/(K+1),
+                            K/(K+1),
+                            by = 1/(K+1)
+                            ))))
+
+#str(quantile_splice_basis)
+
+five_knot_basis <- with(simdata, bs(x, df = 8))
+str(five_knot_basis)
+
+```
+
+### Try On Your Own
+
+Fit a linear regression model with R's choice of 3 interior knots. How does the fit of this model visually compare to our original choice of knots?
+
+```{r}
+#| label: fit model with spline_basis2a
+
+lm_3knots <- lm(y ~ bs(x, df = 6),
+                data = simdata)
+
+lm_3knots_predictions <- predict(lm_3knots, 
+                                newdata = new_x2)
+
+plot(y ~ x, data = simdata, xlim = c(-5, 20))   # original data to fit a model to
+lines(xlims2, lm_quadratic_predictions2, col = "blue", lwd = 2)
+lines(xlims2, lm_quintic_predictions, col = "darkgreen", lwd = 2)
+lines(xlims2, lm_splines_predictions, col = "darkorange", lwd = 2)
+lines(xlims2, lm_3knots_predictions, col = "purple4", lwd = 2)
+
+```
+
+## Natural Splines
+
+Since natural splines constrain the function to be linear outside the support of the data, the model is simpler and so we can gain back a few degrees of freedom. We use the `ns` function to create a natural spline basis:
+
+```{r}
+#| label: natural spline basis
+
+```
+
+`ns` requires cubic splines, whereas `bs` has a `degree` argument that is 3 by default.
+
+```{r}
+#| label: predict with ns
+
+```
+
+Notice that the natural cubic spline is the only one that even sort-of catches the asymptotic behavior of $f(x)$ at large x. Generally, if we expect to be doing extrapolation, `ns` is a better option than `bs`.
+
+`ns` allows us to pre-specify the knots too:
+
+```{r}
+#| label: ns with pre-specified knots
+
+```
+
+
+Notice that even with `ns`, extrapolation is sensitive to the choice of knots! However, we can see that natural cubic splines generally give us the *best* compromise between being "wiggly enough" to fit the data well but "not too wiggly" to give problematic predictions outside the range of the data.
+
+### A Note About Degrees of Freedom
+
+For a piecewise constant function with $K$ knots consisting of polynomials of degree $D$, we have $(D+1) + K(D+1) = (D+1)(K+1)$ parameters to estimate. The regression spline conditions produce at most $DK$ constraints (continuity and continuity of up to the first $D-1$ derivatives at each knot), which suggests that the number of "regression degrees of freedom" used up by fitting a cubic spline is $D + K + 1$. The `bs` function uses a "B-spline" basis whose basis functions are *not* the regression splines, but the degrees of freedom are calculated equivalently when `intercept = FALSE`.
+
+For a "natural" spline, requiring linearity beyond the boundary knots adds 4 more parameters to estimate but imposes $2D$ more constraints. So the number of degrees of freedom is now $D + K + 1 + 4 - 2D$ = $K + 5 - D$ = $K+2$ for cubic splines, which matches the degrees of freedom in the `ns` function when `intercept = FALSE`. However, we typically think of the boundary knots as being "included" in the number of knots when fitting a natural cubic spline, producing $K$ degrees of freedom. The fact that we have to do mental gymnastics about whether the boundary knots count when calculating the degrees of freedom to pass into R certainly isn't confusing.
+
+Most of the time, we just specify `df` and let R figure out *where* to place the knots. This is especially important in inference, because we need to keep track of how the `n-1` total degrees of freedom available are partitioned between model and residuals. In some cases, however, it may be better to specify the knots yourself based on where the function seems to be more/less flexible and not worry about `df`. 
+
+In both cases, it is not unusual to try several different numbers/combinations of knots and figure out which ones produce the best fit/predictions.

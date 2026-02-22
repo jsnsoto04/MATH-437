@@ -1,0 +1,264 @@
+---
+title: "Simulation Activity: Bootstrap Confidence Intervals"
+subtitle: "Math 437"
+format: html
+editor: source
+---
+
+## General Format of a Bootstrap Confidence Interval
+
+Remember that the confidence level describes a *procedure* for generating the interval from a sample of data. The procedure that we use to create a bootstrap confidence interval is:
+
+1. Generate a bunch of bootstrap samples
+2. Calculate something on each bootstrap sample
+3. Use the calculated numbers from Step 2 to obtain the confidence interval
+
+The distinction between the different bootstrap confidence interval methods is what happens in Step 2 and Step 3.
+
+Let's try some different bootstrap methods for estimating a population mean. First we'll simulate some data so that we know what the "right" population mean is:
+
+```{r}
+#| label: simulate our data
+
+set.seed(138)
+x <- rexp(100, rate = 1)  # we know that the pop. mean = 1
+hist(x)                   # this looks sketch
+
+```
+
+## Bootstrap Percentile Confidence Interval
+
+This is the simplest method for getting a confidence interval. 
+
+Step 2: Calculate an estimate of the parameter, producing a bootstrap sampling distribution of an appropriate estimator.
+
+Step 3: Find the $\alpha/2$ and $1 - \alpha/2$ percentiles of the bootstrap sampling distribution.
+
+```{r}
+#| label: construct bootstrap sampling distribution
+
+library(boot)
+
+B <- 1000
+
+boot_sample_mean <- function(df, ind){
+  # df = data frame containing the original data to sample from
+  # ind = vector of row indices corresponding to the bootstrap sample
+  
+  # Step 1: the bootstrap sample is inherent when we subset df based on ind
+  boot_df <- df[ind, , drop = FALSE]
+  
+  # Step 2: calculate the statistic
+  boot_mean <- mean(boot_df$x)  # Note to self: we better have a column labeled "x"
+  
+  return(boot_mean) # explicitly what is the output
+  
+}
+
+sim_data <- data.frame(x=x)
+
+set.seed(142)
+boot_sampling_dist <- boot(
+  data = sim_data,
+  statistic = boot_sample_mean,
+  R = B
+)
+
+```
+
+```{r}
+#| label: bootstrap percentile interval
+
+hist(boot_sampling_dist$t)
+C <- .95                    # confidence level as a decimal
+alpha <- (1-C)              # sig. level + conf. level = 1
+percentile_bounds <- quantile(
+  boot_sampling_dist$t,     # vector we are finding percentiles of
+  c(alpha/2, 1-alpha/2)     # vector of percentiles to use
+)
+
+print(percentile_bounds)
+
+```
+
+Three nice properties of a bootstrap percentile interval
+
+1. Intuitive (no need to mess around with what critical value)
+2. Range-Perserving (guarentees no ridiculous estimates)
+3. Transformation-invariant: if $\phi = m(\theta)$, where m is a monotonic transformation, and the CI for $\theta$ is (L, U), then the CI for $\phi$ is $m((L), m(U))$ or $m((U), m(L))$ if m is a decreasing fn
+
+### Simulation Study of the Confidence Level
+
+Recall that the confidence level describes the probability that the method will "work" prior to collecting data, that is, the long-run proportion of samples for which our method will produce an interval that contains the true value of the parameter to be estimated. (Technically, there's an $\text{inf}$ involved, but we're going to ignore the weird edge cases...)
+
+This means that we can estimate the confidence level by:
+
+1. Obtaining a very large number of samples
+2. Computing a confidence interval on each sample
+3. Determining the proportion of the resulting confidence intervals that contain the true parameter value
+
+Obviously, we can only do this using simulation. So let's do it.
+
+```{r}
+#| label: turn percentile CI into a function
+
+boot_percentile_ci <- function(x, B = 1000, C = 0.95){
+  # this function constructs a single bootstrap percentile CI
+  # x = a vector of data
+  # B = the number of bootstrap samples
+  # C = the confidence level
+  
+sim_data <- data.frame(x = x)
+  
+  # get sampling dist.
+boot_sampling_dist <- boot(
+  data = sim_data,
+  statistic = boot_sample_mean,
+  R = B
+)
+
+  # get quantiles of the sampling dist.
+  alpha <- (1-C)              # sig. level + conf. level = 1
+  percentile_bounds <- quantile(
+  boot_sampling_dist$t,     # vector we are finding percentiles of
+  c(alpha/2, 1-alpha/2)     # vector of percentiles to use
+)
+
+return(percentile_bounds)
+}
+```
+
+```{r}
+#| label: lots of simdata
+
+lots_of_simdata <- matrix(
+  rexp(1000*100, rate = 1),
+  nrow = 100,
+  ncol = 1000
+)
+
+```
+
+```{r}
+#| label: percentile CI on each random sample
+# now we need to apply our function over each column of simulated data
+
+
+set.seed(206)
+boot_perc_cis <- apply(
+  lots_of_simdata,      # matrix w/ data in it
+  2,                    # apply over each COLUMN in the matrix
+  boot_percentile_ci    #function to apply
+)
+
+```
+
+```{r}
+#| label: estimate the confidence level
+
+boot_low <- boot_perc_cis[1, ]
+boot_high <- boot_perc_cis[2, ]
+cover <- boot_low < 1 & boot_high > 1 # TRUE if 1 is between boot_low and boot_high, FALSE o/w
+mean(cover)
+# this gives proportion of our 1000 CIs that cover 1
+```
+
+## Bootstrap Bias-Corrected and Accelerated (BCa) Confidence Interval
+
+In Step 3, the BCa method "adjusts" the bounds of the percentile confidence interval to (usually) preserve its properties while minimizing the disadvantages, at the cost of additional computation.
+
+```{r}
+#| label: manually do the BCa adjustments
+# start with bias correction
+observed_estimate <- mean(simdata)
+prop_below_orig <- sum(bootstrap_estimates <  observed_estimate)/B
+z0.hat <- qnorm(prop_below_orig)
+
+# acceleration requires jackknifing
+jackknife_estimates <- numeric(n)  # we remove each observation once
+for (i in 1:n){
+  newdata <- simdata[-i]  # remove the ith observation from the vector
+  jackknife_estimates[i] <- mean(newdata)  # compute the mean of all but the ith observation
+}
+
+jackknife_mean <- mean(jackknife_estimates)
+
+a.temp <- jackknife_mean - jackknife_estimates
+a.numerator <- sum(a.temp^3)
+a.denominator <- 6*(sum(a.temp^2))^(3/2)
+a.hat <- a.numerator/a.denominator
+
+# compute the corrections
+fraction.low <- (z0.hat + qnorm(alpha/2))/(1 - a.hat*(z0.hat + qnorm(alpha/2)))
+fraction.high <- (z0.hat + qnorm(1-alpha/2))/(1 - a.hat*(z0.hat + qnorm(1-alpha/2)))
+
+# compute the actual quantiles based on the corrections
+BCa.quantiles <- pnorm(c(fraction.low, fraction.high))
+
+# compute the confidence interval
+boot_bca_ci <- quantile(bootstrap_estimates, probs = BCa.quantiles)
+print(boot_bca_ci)
+```
+
+Notice that our estimates were moved slightly higher because the sample was skewed right. 
+
+## Constructing Bootstrap Confidence Intervals Using `boot`
+
+```{r}
+#| label: load packages
+library(boot)
+```
+
+Here we reverse Step 1 and Step 2. First we define a function that we're going to apply to every bootstrap sample, then we create the bootstrap samples with `boot`.
+
+```{r}
+#| label: Step 1 define the function
+
+boot_sample_mean <- function(df, ind){
+  # df = data frame containing the original data to sample from
+  # ind = vector of row indices corresponding to the bootstrap sample
+  
+  # Step 1: the bootstrap sample is inherent when we subset df based on ind
+  boot_df <- df[ind, , drop = FALSE]
+  
+  # Step 2: calculate the statistic
+  boot_mean <- mean(boot_df$x)  # Note to self: we better have a column labeled "x"
+  
+  return(boot_mean) # explicitly what is the output
+  
+}
+
+```
+
+```{r}
+#| label: Step 2 create bootstrap samples
+B <- 1000
+
+sim_data <- data.frame(x=x)
+
+set.seed(142)
+boot_sampling_dist <- boot(
+  data = sim_data,
+  statistic = boot_sample_mean,
+  R = B
+)
+
+```
+
+Finally, in Step 3, we use the `boot.ci` function to construct the confidence interval(s):
+
+```{r}
+#| label: Step 3 with boot.ci
+
+boot.ci(
+  boot_sampling_dist, # the thing we got out of the boot fn
+  conf = .95,         # conf int
+  type = c("perc", # percentile
+           "bca"   # BCa CI
+           )
+)
+
+```
+
+Note that these intervals differ slightly because the bootstrap samples are different.
+

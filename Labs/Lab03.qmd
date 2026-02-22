@@ -1,0 +1,398 @@
+---
+title: "Lab Assignment #3"
+author: "Math 437 - Modern Data Analysis - Jason Soto"
+format: pdf
+editor: source
+---
+
+## Introduction
+
+In this lab, we will gain experience with the `boot` package used to perform (nonparametric) bootstrapping.
+
+We'll continue using the `alcohol` data from the last lab.
+
+```{r}
+#| label: do this at the beginning of every lab file
+#| message: false
+#| warning: false
+
+# remember to change this
+here::i_am("Labs/Lab03.qmd")
+
+# load packages
+library(ISLR2)
+library(boot) # should be installed 
+
+# load data
+alcohol <- readr::read_csv(here::here("Data/alcohol.csv"))
+```
+
+This lab assignment is worth a total of **15 points**.
+
+## Problem 1: Bootstrap Estimation of Standard Error (1.5 pts total)
+
+### Part a (Code: 0.5 pts)
+
+ISLR Lab 5.3.4, only the four chunks in "Estimating the Accuracy of a Statistic of Interest."
+
+If you are in the actuarial science concentration, you should be familiar with (or will at some point see) this formula! For the rest of us, note that $X$ and $Y$ are assumed to be the yearly return of two different financial assets, and $\alpha$, the quantity to be estimated, is the fraction of money to be invested in $X$ such that the variance (risk) of the total investment $\alpha X + (1 - \alpha) Y$ is minimized. In this problem $\alpha$ is not the significance level!
+
+### Part b (Code: 1 pt)
+
+Replicate the center panel of textbook Figure 5.10: a histogram of the bootstrap estimates of $\alpha$ (from Part a) with a solid pink (or red) line at the true value of $\alpha = 0.6$.
+
+HINTS:
+
+1. You may want to store the output of the `boot` function in Part (a) as a variable
+
+2. The function to add the vertical line is `abline`.
+
+#### Solution
+
+```{r}
+#| label: Chunk One 5.3.4
+
+alpha.fn <- function(data, index) {
+X <- data$X[index]
+Y <- data$Y[index]
+(var(Y) - cov(X, Y)) / (var(X) + var(Y) - 2 * cov(X, Y))
+}
+
+```
+
+```{r}
+#| label: Chunk Two 5.3.4
+
+alpha.fn(Portfolio, 1:100)
+
+```
+
+```{r}
+#| label: Chunk Three 5.3.4
+
+set.seed(7)
+alpha.fn(Portfolio, sample(100, 100, replace = T))
+
+```
+
+```{r}
+#| label: Chunk Four 5.3.4
+
+a_boot <- boot(Portfolio , alpha.fn, R = 1000)
+
+```
+
+```{r}
+#| label: Chunk One (b)
+
+hist(a_boot$t, 
+     main = "Bootstrap estimates of Alpha",
+     xlab = "Alpha",
+     ylab = "Simulated Data",
+)
+
+abline(v = .6, col = "magenta")
+
+```
+
+## Problem 2: Bootstrap Confidence Intervals (2 pts total)
+
+### Part a (Explanation: 1 pt)
+
+The distribution you graphed in Problem 1b is a sampling distribution of $\hat{\alpha}$. Explain why it would be appropriate to use this sampling distribution to construct a confidence interval for $\alpha$, but not to obtain a p-value for a hypothesis test of $H_0: \alpha = 0.6$ against $H_a: \alpha \neq 0.6$.
+
+#### Solution
+
+The goal of the confidence interval is to estimate that an alpha could be there, and we use alpha hat to bound it and not make assumptions about alpha. We can't get a p-value since we have not made any assumptions about the p-value.
+
+### Part b (Code: 1 pt)
+
+Use the `boot` package and the output from Problem 1 to obtain a 90% confidence interval for $\alpha$ using two different methods: percentile and BCa. 
+
+#### Solution
+
+```{r}
+#| label: Conf. Int.
+
+boot.ci(
+  a_boot, # the thing we got out of the boot fn
+  conf = .90,         # conf int
+  type = c("perc", # percentile
+           "bca"   # BCa CI
+           )
+)
+
+```
+
+## Problem 3: Analysis of Alcohol Dataset (11.5 pts total)
+
+### Part a (Code: 1 pt; Explanation: 1 pt)
+
+Using the `alcohol` dataset, find the mean, standard deviation, median, and interquartile range of `Intake` in each group. Also, produce two histograms showing the distribution of `Intake` in each group.
+
+Based on your summaries and graphs, write one or two sentences comparing the distribution of `Intake` between the two groups.
+
+HINTS:
+
+1. If you are already familiar with the `tidyverse`, you may load the `dplyr` and `ggplot2` packages and use appropriate functions in those packages. If your `tidyverse` skills are rusty, or you would like to start learning `tidyverse` code early in the semester, please see Chapter 1 (specifically Section 1.5.4) and Chapter 3 (specifically Section 3.5) of *R for Data Science* give you some example code that you can adapt to solve this challenge.
+
+2. If you do not want to deal with the `tidyverse` until we cover it in lecture later in the semester, it will be easiest to create two separate datasets, `SST` and `Control`, noting that the first 11 subjects in the dataset are in the SST group and the last 12 are in the Control group.
+
+#### Solution
+
+```{r}
+#| label: SST
+
+SST <- which(alcohol$Group == "SST")
+SST_Intake <- alcohol$Intake[SST]      # Or in one line SST_Intake <- alcohol$Intake[1:11]
+
+mean(SST_Intake)
+sd(SST_Intake)
+median(SST_Intake)
+IQR(SST_Intake)
+hist(SST_Intake)
+
+```
+
+```{r}
+#| label: Control
+
+CTRL <- which(alcohol$Group == "Control")
+CTRL_Intake <- alcohol$Intake[CTRL]
+
+mean(CTRL_Intake)
+sd(CTRL_Intake)
+median(CTRL_Intake)
+IQR(CTRL_Intake)
+hist(CTRL_Intake)
+
+```
+
+Based on my summaries and graphs, we see higher values for the mean, median, and IQR from the control group which may imply that the standard treatment may be less effective. We do see through the sd function that there is more deviation in the SST group.
+
+### Part b (Code: 1.5 pts, Explanation: 0.5 pts)
+
+Obtain a bootstrap estimate of the standard error of the difference of sample means between the two groups. Also, compute the (unpooled) standard error of the difference of sample means directly using a formula. Compare your bootstrap estimate with your formula-based estimate. Which one is larger? Is the difference noticeable?
+
+HINT: You are likely to get a warning message that says "NAs introduced by coercion". If you see this message, convert the `Group` variable to a factor before calling `boot`. 
+
+#### Solution
+
+```{r}
+#| label: Boot Strapping Set Up 1
+
+boot_diff_sample_means <- function(df, ind){
+  # df: og data
+  # ind: the row indices our resample
+  
+  # Step 1: get out bootstrap sample 
+  boot_sample <- df[ind, , drop = FALSE]
+  boot_CTRL <- boot_sample[which(boot_sample$Group == "Control"), , drop = FALSE]
+  boot_SST <- boot_sample[(which(boot_sample$Group == "SST")), , drop = FALSE]
+  
+  # Step 2: get our statistic
+  xbar_CTRL <- mean(boot_CTRL$Intake)
+  xbar_SST <- mean(boot_SST$Intake)
+  
+  boot_diff_means <- xbar_CTRL - xbar_SST
+  
+  return(boot_diff_means) # always explicitly return
+  
+}
+```
+
+```{r}
+#| label: Standard Error of the Difference of Sample Means Between the Two Groups 1
+set.seed(67)
+
+boot_estimates_diff_xbar <- boot(
+  data = alcohol,                                 # original data set
+  statistic = boot_diff_sample_means,             # function to apply
+  R = 1000,                                       # 1000 bootstrap samples
+  strata = as.factor(alcohol$Group)               # vector of group values
+                                                  # strata NEEDS TO BE A FACTOR, keeps each                                                                  sample group equal
+)
+
+sd(boot_estimates_diff_xbar$t)
+
+```
+
+```{r}
+#| label: Unpooled
+
+sqrt(((sd(CTRL_Intake))^2)/length(CTRL_Intake) + ((sd(SST_Intake))^2)/length(SST_Intake))
+
+```
+
+The larger standard error is unpooled but difference is miniscule as expected.
+
+### Part c (Code: 1.5 pts)
+
+Using the `alcohol` dataset, obtain a 95% confidence interval for the difference of population means between the two groups using the following methods:
+
+* Bootstrap percentile
+* Bootstrap BCa
+* (standard) t-confidence interval
+
+HINT: For some reason, many students assume that everything they need to solve a problem is contained in that week's example code and totally forget about example code from previous weeks. You should not do that for this problem.
+
+#### Solution
+
+```{r}
+#| label: Bootstrap Percentile & CI
+
+boot.ci(
+  boot_estimates_diff_xbar, # the thing we got out of the boot fn
+  conf = .95,         # conf int
+  type = c("perc", # percentile
+           "bca"   # BCa CI
+           )
+)
+
+```
+
+```{r}
+#| label: (Standard) t-Confidence Interval
+
+t.test(Intake ~ Group, data = alcohol)$conf.int
+
+```
+
+### Part d (Code: 3 pts)
+
+The *bootstrap t* confidence interval is a popular and useful alternative when we have a reasonably large amount of data, but the distribution is so problematically skewed that the assumption of a normally distributed estimator is laughably wrong. The *bootstrap t* interval doesn't pretend that the t-statistics have a t-distribution; instead, we estimate the true sampling distribution of t-statistics and use that sampling distribution to obtain appropriate critical values.
+
+To construct a *bootstrap t* confidence interval:
+
+1. Compute the point estimate (observed value of the estimator)
+2. Take a bootstrap sample
+3. Compute the bootstrap t statistic:
+
+$$
+t = \frac{\text{bootstrap estimated value} - \text{observed value}}{\text{standard error computed on bootstrap sample}}
+$$
+
+Note that computing the denominator of the fraction may require an *iterated bootstrap* or *bootstrap-within-bootstrap* (that is, taking a bootstrap sample from the bootstrap sample), but here our estimator is the difference of sample means and we have a nice formula for the denominator (just remember to use the bootstrap sample to compute standard deviations).
+
+4. Repeat Steps 2-3 many times to construct a bootstrap sampling distribution of the t-statistic.
+5. Compute the $\alpha/2$ and $1 - \alpha/2$ quantiles of that distribution. These are your lower and upper critical values.
+6. Estimate the standard error of the estimator using the original data
+
+If a formula exists (as it does here), then we can use it. If not, make sure you saved the bootstrap samples from Step 2, and then use those samples to estimate the standard error.
+
+7. Construct the lower and upper bounds of the interval.
+
+Code these steps to construct a 95% bootstrap-t confidence interval for the difference of population means between the SST and Control groups.
+
+HINTS:
+
+1. From Part a you have everything you need to find the point estimate.
+2. From Part b you have two different estimates of the standard error; either is usable.
+3. From Part b you also have a function to compute a difference of means on a bootstrap resample; the tricky part will be adapting it to compute the bootstrap t-statistic.
+4. Remember to subtract a positive margin of error to get the lower bound of the confidence interval (i.e., use the positive critical value) and subtract a negative margin of error to get the upper bound.
+
+#### Solution
+
+```{r}
+#| label: Boot Strapping Set Up 2
+
+boot_t <- function(df, ind){
+  # t-statistic is of the form (stat.value - param.value)/SE
+  # for bootstrap, stat. value is statistic value computed from boot sample
+  # param.value is center of bootstrap sampling dist. = statistic value computed from original sample
+  # SE is standard error of stat. estimated using boot sample
+  
+  # df: og data
+  # ind: the row indices our resample
+  
+  # Step 1: get out bootstrap sample 
+  boot_df <- df[ind, , drop = FALSE]
+  boot_SST <- boot_df[(which(boot_df$Group == "SST")), , drop = FALSE]
+  boot_CTRL <- boot_df[which(boot_df$Group == "Control"), , drop = FALSE]
+  
+  xbar_SST <- mean(boot_SST$Intake)
+  xbar_CTRL <- mean(boot_CTRL$Intake)
+  
+  # Step 2: get original data
+  # df contains original alcohol data
+  orig_SST <- df[which(df$Group == "SST"), , drop = FALSE]
+  orig_CTRL <- df[which(df$Group == "Control"), , drop = FALSE]
+  
+  xbar_orig_SST <- mean(orig_SST$Intake)
+  xbar_orig_CTRL <- mean(orig_CTRL$Intake)
+  
+  # Step 3: get our statistics
+  
+  boot_diff_means <- xbar_CTRL - xbar_SST
+  orig_diff_means <- xbar_orig_CTRL - xbar_orig_SST
+  
+  # Step 4: computing SE
+  n_SST <- nrow(boot_SST)
+  n_CTRL <- nrow(boot_CTRL)
+  sd_SST <- sd(boot_SST$Intake)
+  sd_CTRL <- sd(boot_CTRL$Intake)
+  
+  SE <- sqrt(sd_SST^2/n_SST+sd_CTRL^2/n_CTRL)
+  
+  # Step 5: get t
+  t <- (boot_diff_means - orig_diff_means)/SE
+  return(t)
+}
+
+```
+
+```{r}
+#| label: Standard Error of the Difference of Sample Means Between the Two Groups 2
+set.seed(67)
+
+boot_t_stat <-  boot(
+  data = alcohol,                                 # original data set
+  statistic = boot_t,                             # function to apply
+  R = 1000,                                       # 1000 bootstrap samples
+  strata = as.factor(alcohol$Group)               # vector of group values
+                                                  # strata NEEDS TO BE A FACTOR, keeps each                                                                  sample group equal
+)
+
+boot_t_stat
+```
+
+```{r}
+#| label: Uhh
+
+c <- .95
+alpha <- 1-c
+t_crit <- quantile(boot_t_stat$t, c(alpha/2, 1-alpha/2))
+
+orig_diff_means <- mean(CTRL_Intake) - mean(SST_Intake)
+SE <- sqrt(((sd(CTRL_Intake))^2)/length(CTRL_Intake) + ((sd(SST_Intake))^2)/length(SST_Intake))
+
+lower <- orig_diff_means - 2.36*SE
+upper <- orig_diff_means - -2.09*SE
+
+lower
+upper
+
+```
+
+
+### Part e (Explanation: 1 pt)
+
+Briefly compare the bounds of the four confidence intervals. 
+
+#### Solution
+
+Percentile CI: (239.4, 683.7)                 
+BCa CI:        (247.5, 701.4)
+t CI:          (217.3, 695.3)
+Final CI:      (185.4, 696.2)
+
+The four confidence intervals are kind of similar, though you see a pretty bigger shift in the lower bound rather than the upper bound. This is mostly seen for the t CI and even more so in the final CI. The widest is also the final calculated CI, and the narrowest would be Percentile CI, but not much difference from the first 3, all CI get wider and wider.
+
+### Part f (Explanation: 2 pts)
+
+Pick one of the confidence intervals and write a sentence to interpret the confidence interval in the context of the data collected (remember that the units of `Intake` are centiliters). Does the interpretation convince you that the SST program lowers alcohol consumption? Why or why not?
+
+#### Solution
+
+The BCa CI for the difference in mean alcohol intake (Control − SST) is (247.5, 701.4) centiliters. We estimate with 95% confidence that people in the SST group consume between about 247.5 and 701.4 less centiliters of alcohol on average than those in the Control group. Thus, I am convinced that the SST program lowers alcohol consumption considering the lowest average with 95% confidence is 2.475 liters of alcohol which I believe is a considerate diffence. It is like if I cut out an entire big bottle of coke from my diet.
+

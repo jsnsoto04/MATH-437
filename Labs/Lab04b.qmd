@@ -1,0 +1,446 @@
+---
+title: "Lab Assignment #4b"
+author: "Math 437 - Modern Data Analysis - Jason Soto"
+format: pdf
+editor: source
+---
+
+## Introduction
+
+In a [2020 article](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0233515), Murray et al. attempted to understand the relationship between a professor's research output and their perceived teaching effectiveness.
+
+To quantify perceived teaching effectiveness, they scraped [Rate My Professor](https://www.ratemyprofessors.com/) and calculated an "overall effectiveness" score (based on the data dictionary, this appears to just be the average star rating, on a scale from 1-5, from reviews posted between Spring 2010 and Fall 2017 semesters).
+
+An anonymized, processed dataset and accompanying data dictionary is [publicly available](https://github.com/murrayds/aa_rmp/tree/master/data); I've removed most of the research-related variables to shrink the size of the dataset and shared it with you on Canvas as *RateMyProfessor*.
+
+```{r}
+#| label: do this at the beginning of every lab file
+#| message: false
+#| warning: false
+here::i_am("Labs/Lab04b.qmd")
+
+# load packages
+library(ISLR2)
+library(car)
+library(ggplot2)
+
+# load data
+RateMyProfessor <- readr::read_csv(here::here("Data/RateMyProfessor.csv"))
+```
+
+We will continue to build increasingly complex models to understand what goes into a professor's RateMyProfessor rating.
+
+This lab assignment is worth a total of **12.5 points**.
+
+## Problem 4: Interaction Terms (5.5 pts total)
+
+### Part a (Code: 0.5 pts)
+
+Run the single line of code in ISLR Lab 3.6.4.
+
+#### Solution
+
+```{r}
+#| label: The single line of code in ISLR Lab 3.6.4.
+
+summary(lm(medv ~ lstat * age, data = Boston))
+
+```
+
+
+### Part b (Explanation: 1 pt)
+
+The code below creates a new dataset, `associates`, by subsetting the `RateMyProfessor` dataset to include only the Associate Professors.
+
+```{r}
+#| label: subset to get just the Associate Professors
+
+# we will learn a much more elegant way to do this!
+associates <- RateMyProfessor[
+  which(RateMyProfessor$rank == "Associate Professor"),
+  # all columns
+]
+```
+
+This code creates a graph of overall rating vs. difficulty rating for those associate professors, with "hot" professors shown in red and "cold" professors shown in blue.
+
+```{r}
+#| label: interaction plot of overall, difficulty, and chili pepper
+
+# Step 1: Set up the plot
+ggplot(
+  data = associates,
+  mapping = aes(
+    x = difficulty,
+    y = overall,
+    color = factor(hotness) |> relevel(ref = "hot")
+  )
+) +
+# Step 2a: Add the scatterplot
+  geom_point(alpha = 0.25) +
+# Step 2b: add the least-squares regression lines
+  geom_smooth(method = "lm", se = FALSE) + # se = FALSE means no confidence bands
+# Step 3: customize the plot and legend labels
+  labs( # make labels nice
+    title = "Associate Professors",
+    x = "Difficulty Rating (1-5)",
+    y = "Overall Rating (1-5)"
+  ) +
+  scale_color_manual(  # make legend nice
+    name = "Chili Pepper Rating",
+    labels = c(hot = "Attractive", cold = "Less-attractive"),
+    values = c(hot = "red", cold = "blue")
+  )
+```
+
+Based on this graph, how does the difficulty of the professor modify the relationship between attractiveness and overall rating?
+
+#### Solution
+
+When difficulty increases, overall rating does as well, but the relationship we see between attractiveness and overall rating is that less-attractive professors are penalized more than the attractive.
+
+### Part c (Code: 0.5 pts; Computation and Explanation: 2 pts)
+
+Using the `associates` dataset, fit a linear model predicting overall rating from the difficulty rating (`difficulty`), chili pepper rating (`hotness`), and an interaction term between `difficulty` and `hotness`.
+
+Using the model output, write out the least-squares regression equation for the red line and the blue line on the plot from Part a. Explain how you obtained each equation and which equation corresponds to which line.
+
+#### Solution
+
+```{r}
+#| label: group interaction model
+
+lm_group_interaction <- lm(
+  overall ~ difficulty * hotness,
+  data = associates
+)
+
+summary(lm_group_interaction)
+
+```
+
+### Part d (Explanation: 1.5 pts)
+
+The slope corresponding to `hotnesshot` in the model from Part c is approximately -0.254, implying that "hot" professors are predicted to have lower overall ratings than  "cold" professors. But this contradicts the graph in Part a, in which "hot" professors consistently have higher ratings than "cold" professors.
+
+Explain what's missing from the interpretation of the slope of -0.254, and how fixing the interpretation resolves the apparently counter-intuitive finding.
+
+#### Solution
+
+yhat = 5.3672 + (-.6235)(difficulty) + (-.2541)(hotness = "hot") + .2972(difficulty)(hotness = "hot")
+yhat = 5.3672 + (-.6235)(difficulty)   (unattractive)
+yhat = 5.1131 + (-.3263)(difficulty)   (attractive)
+
+When group changes from unattractive to attractive, and difficulty is held constant at 0, predicted y by .2541. This is what is misinterpreted, we have a prediction for the y intercept which we do not care about since difficulties range from 1 to 5. After working out our yhats, we find that attractive professors have a more forgiving negative effect from difficulty.
+
+Thus, what’s missing is that the coefficient –0.254 is not the overall difference between “hot” and “cold” professors. It is the difference when difficulty = 0, which is not possible.
+
+## Problem 5: Polynomial Regression (2.5 pts total)
+
+### Part a (Code: 0.5 pts)
+
+Run the code in ISLR Lab 3.6.5. Put each chunk from the textbook in its own chunk.
+
+#### Solution
+
+```{r}
+#| label: Chunk 1 5a
+
+lm.fit2 <- lm(medv ~ lstat + I(lstat^2))
+summary(lm.fit2)
+
+```
+
+```{r}
+#| label: Chunk 2 5a
+
+lm.fit <- lm(medv ~ lstat)
+anova(lm.fit, lm.fit2)
+
+```
+
+```{r}
+#| label: Chunk 3 5a
+
+par(mfrow = c(2, 2))
+plot(lm.fit2)
+
+```
+
+```{r}
+#| label: Chunk 4 5a
+
+lm.fit5 <- lm(medv ~ poly(lstat, 5))
+summary(lm.fit5)
+
+```
+
+```{r}
+#| label: Chunk 5 5a
+
+summary(lm(medv ~ log(rm), data = Boston))
+
+```
+
+### Part b (Code: 1 pt)
+
+Run the code in ISLR Lab 7.8.1. Stop when you get to the model predicting whether someone earns more than $250,000 per year.
+
+Do not attach the `Wage` dataset. If a line of code involving `age` or `wage` does not run, use `Wage$age` or `Wage$wage` instead (as appropriate).
+
+In this lab, "both subplots" refers to the graph showing the linear regression model `fit` and the graph showing the logistic regression model `fit`. Since we are not fitting the logistic regression model in this lab, you can ignore the line setting up the margins of the plot with `par(mfrow = c(1,2), ...)`.
+
+The Chapter 7 lab does a poor job of bookkeeping. You should use more informative names than just `fit` so that you know which model you are `fit`ting. Otherwise, it will be easy to run into problems where you think you're predicting with one model and you're actually predicting with a different one.
+
+#### Solution
+
+```{r}
+#| label: Chunk 1 5b
+
+fit <- lm(wage ~ poly(age, 4),
+          data = Wage)
+coef(summary(fit))
+
+```
+
+```{r}
+#| label: Chunk 2 5b
+
+fit2 <- lm(wage ~ poly(age, 4, raw = T),
+           data = Wage)
+coef(summary(fit2))
+
+```
+
+```{r}
+#| label: Chunk 3 5b
+
+fit2a <- lm(wage ~ age + I(age^2) + I(age^3) + I(age^4),
+            data = Wage)
+coef(fit2a)
+
+```
+
+```{r}
+#| label: Chunk 4 5b
+
+fit2b <- lm(wage ~ cbind(age, age^2, age^3, age^4),
+            data = Wage)
+
+```
+
+```{r}
+#| label: Chunk 5 5b
+
+agelims <- range(Wage$age)
+
+age.grid <- seq(from = agelims[1],
+                to = agelims[2])
+
+preds <- predict(fit,
+                 newdata = list(age = age.grid),
+                 se = TRUE)
+se.bands <- cbind(preds$fit + 2 * preds$se.fit, preds$fit - 2 * preds$se.fit)
+
+```
+
+```{r}
+#| label: Chunk 6 5b
+
+plot(Wage$age, Wage$wage, xlim = agelims, cex = .5, col = "darkgrey")
+title("Degree -4 Polynomial", outer = T)
+lines(age.grid, preds$fit, lwd = 2, col = "blue")
+matlines(age.grid, se.bands, lwd = 1, col = "blue", lty = 3)
+
+```
+
+### Part c (Code: 1 pt)
+
+Produce a figure similar to the left panel of Figure 7.1, with the following differences:
+
+* You should predict `overall` from `difficulty` using the `associates` dataset.
+* You should use a quadratic (degree-2) polynomial instead of a quartic (degree-4).
+* Instead of plotting approximate 95% confidence bands using the 2 SE method, plot exact 95% confidence bands by replacing `se = TRUE` with `interval = "confidence"` and figuring out how to subset the resulting data frame to create `se.bands`.
+
+Notice that the predictions are now returned as a matrix instead of a list, so you will need to do a bit of investigation to figure out how to subset the matrix correctly to produce the lines on the plot.
+
+#### Solution
+
+```{r}
+#| label: Fitting
+
+fit_oa <- lm(overall ~ poly(difficulty, 2),
+          data = associates)
+coef(summary(fit_oa))
+
+```
+
+```{r}
+#| label: Defining
+
+difflims <- range(associates$difficulty)
+
+diff.grid <- seq(from = difflims[1],
+                to = difflims[2])
+
+preds_oa <- predict(fit_oa,
+                 newdata = list(difficulty = diff.grid),
+                 se = TRUE)
+se.bands_oa <- cbind(preds_oa$fit + 2 * preds_oa$se.fit, preds_oa$fit - 2 * preds_oa$se.fit)
+
+```
+
+```{r}
+#| label: Plot
+
+plot(associates$difficulty, associates$overall, xlim = difflims, cex = .5, col = "darkgrey")
+title("Degree -2 Polynomial", outer = T)
+lines(diff.grid, preds_oa$fit, lwd = 2, col = "blue")
+matlines(diff.grid, se.bands_oa, lwd = 1, col = "blue", lty = 3)
+
+```
+```{r}
+#| label: Defining (ignore)
+
+#difflims <- range(associates$difficulty)
+
+#diff.grid <- seq(from = difflims[1],
+                #to = difflims[2])
+
+#preds_oa <- predict(fit_oa,
+                 #newdata = list(difficulty = diff.grid),
+                 #se = FALSE,
+                 #interval = "confidence")
+
+```
+
+```{r}
+#| label: Plot (ignore)
+
+#plot(associates$difficulty, associates$overall, xlim = difflims, cex = .5, col = "darkgrey")
+#title("Degree -2 Polynomial", outer = T)
+#lines(diff.grid, preds_oa[,1], lwd = 2, col = "blue")
+#matlines(diff.grid, preds_oa[, 2:3], lwd = 1, col = "blue", lty = 3)
+
+```
+
+## Problem 6: Splines (1.5 pts total)
+
+### Part a (Code: 0.5 pts)
+
+Run the first three chunks of code in ISLR Lab 7.8.2 (covering regression splines).
+
+#### Solution
+
+```{r}
+#| label: Chunk 1 6a
+
+library(splines)
+fit <- lm(Wage$wage ~ bs(age, knots = c(25, 40, 60)), data = Wage)
+pred <- predict(fit, newdata = list(age = age.grid), se = T)
+plot(Wage$age, Wage$wage, col = "gray")
+lines(age.grid, pred$fit, lwd = 2)
+lines(age.grid, pred$fit + 2 * pred$se, lty = "dashed")
+lines(age.grid, pred$fit - 2 * pred$se, lty = "dashed")
+
+```
+
+```{r}
+#| label: Chunk 2 6a
+
+dim(bs(Wage$age, knots = c(25, 40, 60)))
+dim(bs(Wage$age, df = 6))
+attr(bs(Wage$age, df = 6), "knots")
+
+```
+
+```{r}
+#| label: Chunk 3 6a
+
+fit2 <- lm(Wage$wage ~ ns(age, df = 4), data = Wage)
+pred2 <- predict(fit2, newdata = list(age = age.grid), se = T)
+lines(age.grid, pred2$fit, col = "red", lwd = 2)
+
+```
+
+### Part b (Code: 1 pt)
+
+Fit a model predicting `overall` from `difficulty` using the `associates` dataset and natural splines with three interior knots at 2, 3, and 4.
+
+Produce a figure similar to that in Problem 5c, but with this natural spline model.
+
+#### Solution
+
+```{r}
+#| label: Fitting
+
+fit_nsoa <- lm(overall ~ ns(difficulty, knots = c(2, 3, 4)),
+                data = associates)
+coef(summary(fit_nsoa))
+
+```
+
+```{r}
+#| label: Defining
+
+difflims_ns <- range(associates$difficulty)
+
+diff.grid_ns <- seq(from = difflims_ns[1],
+                to = difflims_ns[2])
+
+preds_nsoa <- predict(fit_nsoa,
+                 newdata = list(difficulty = diff.grid_ns),
+                 se = FALSE,
+                 interval = "confidence")
+
+```
+
+```{r}
+#| label: Plot
+
+plot(associates$difficulty, associates$overall, xlim = difflims_ns, cex = .5, col = "darkgrey")
+title("Natural Spline (3 Knots)", outer = T)
+lines(diff.grid_ns, preds_nsoa[, "fit"], lwd = 2, col = "blue")
+matlines(diff.grid_ns, preds_nsoa[, 2:3], lwd = 1, col = "blue", lty = 3)
+
+```
+
+## Problem 7: Increasing Complexity (3 pts total)
+
+### Part a (Code: 2 pts; Explanation: 1 pt)
+
+The following code creates a *grid* of unique predictor vectors:
+
+```{r}
+#| label: use expand.grid to create unique predictor vectors
+
+# expand.grid creates a data frame in which each 
+# combination of variable values is in a unique row  
+diff_hot_grid <- expand.grid(
+  difficulty = seq(1, 5, by = 0.1),
+  hotness = c("cold", "hot")
+)
+```
+
+Create a model predicting the `overall` rating of associate professors with an interaction term between `hotness` and a nonlinear function of `difficulty`. Adapting the code from either Problem 5c or 6b to include an interaction term will probably be easiest, but you can change the degree of the polynomial or the number/location of knots if you want.
+
+Use the fitted model to make predictions on `diff_hot_grid`. You do not need to include standard errors or confidence intervals; just a vector of predictions is enough for this part.
+
+Create a data frame combining the *predictor* values (from `diff_hot_grid`) and the *predicted* overall ratings, so that you can more easily match up each combination of predictors to the corresponding predicted overall rating. Using that data frame, produce a figure similar to the one I produced in Problem 4a, with the following differences:
+
+* I will show in my solutions how to adapt the code from Problem 4b to create the plot, but I do not expect that you can figure this out unless you are already very familiar with the `ggplot2` package. Instead, copy your scatterplot code from Problem 5c and do not worry about changing the point colors or adding a legend.
+* The lines on the plot should show the predictions of *your* fitted model for "hot" professors (in red) and "cold" professors (in blue), not the model from Problem 4b.
+
+Explain what this graph suggests about how overall rating changes with difficulty for "hot" vs. "cold" professors.
+
+HINT: I have verified that it is possible to solve this problem by adapting only the code I have written in this lab and the code you have copied from the book labs (you may need to figure out what exactly to pass for `newdata`); however, if you can think of a different way to execute a step (e.g., by adapting code you learned in 338 or 439), go for it.
+
+#### Solution
+
+
+
+
+
+
+
+

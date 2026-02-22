@@ -1,0 +1,307 @@
+---
+title: "Simulation Activity: Jackknife and Bootstrap Estimation of Standard Error"
+subtitle: "Math 437"
+format: html
+editor: source
+---
+
+## Jackknife
+
+Let's see how the jackknife works. First we'll simulate some data so that we know what the "right" population distribution is:
+
+```{r}
+#| label: simulate our data
+
+n <- 100
+
+set.seed(104)
+x <- rnorm(n, mean = 5, sd = 1.2)
+
+```
+
+The idea behind the jackknife is to remove one data point from the sample at a time, then compute the statistic using the remaining $n-1$ data points. Here we'll demonstrate that using the sample mean:
+
+```{r}
+#| label: produce jackknife estimates
+
+# Since we are leaving out each obs. once, we will end up with n estimates 
+jackknife_estimates <- numeric(n)
+
+for(i in seq_along(jackknife_estimates)){
+  # Step 1: remove the i^th number from x
+  jackknife_sample <- x[-i]
+  
+  # Step 2: compute sample mean using the other 99 numbers.
+  jackknife_estimates[i] <- mean(jackknife_sample)
+}
+
+```
+
+To estimate the bias, we rely on the fact that the jackknife estimates "should" be centered at the value computed using the entire sample. The bias of our statistic can then be estimated by finding the bias of the distribution of jackknife estimates:
+
+```{r}
+#| label: estimate bias using jackknife
+
+original_mean <- mean(x)
+
+jackknife_bias <- (n-1) * (mean(jackknife_estimates) - original_mean)
+
+```
+
+Notice that these jackknife estimates are *not* from independent random samples of the population - in fact, any two of our samples have $n-2$ data points in common! Therefore, the variance of our estimates is much lower than it "should" be analytically, and needs to be multiplied by an appropriate constant. The constant was chosen so that the standard error of the sample mean had the same value whether the analytical $s/\sqrt{n}$ formula or the jackknife was used to compute it.
+
+```{r}
+#| label: compute variance of jackknife estimates
+
+sum_of_squares <- sum((jackknife_estimates - mean(jackknife_estimates))^2)
+correcting_factor <- (n-1)/n
+# estimated sd of the sampling distribution of sample mean (estimated using )
+jackknife_se <- sqrt(correcting_factor * sum_of_squares)
+sd(x)/sqrt(n)       # should match jackknife_se value
+
+```
+
+The jackknife was invented when computational power was at a premium. Over the next 20 years or so, significant research was undertaken in computational statistics to understand the properties of the jackknife and the conditions under which it failed. The endpoint of that research ended up being a set of *bootstrap methods*, which are generally superior to the jackknife except that they are much more computationally intensive. Luckily, computing power is now much more accessible!
+
+## Nonparametric Bootstrap
+
+The key insight behind the nonparametric bootstrap is that the  distribution of the sample is the "best" estimate of the population distribution. (This insight may seem trivial; proving it is not.)
+
+Therefore, we can pretend that our population consists of infinitely many replications of our sample data, and the sampling distribution of our statistic of interest will be "not too different" compared to if we had taken repeated samples from the true population.
+
+Let's see how this works in practice.
+
+```{r}
+#| label: construct bootstrap estimates using a for loop
+
+B <- 999  # 999 bootstrap resamples from x
+boot_means <- numeric(B)  # to store bootstrap estimates in
+
+set.seed(140)
+
+for(i in seq_along(boot_means)){
+  
+  # Step 1: sample WITH REPLACEMENT from original sample, to match the correct sampling distribution, we need a sample of the same size as the original.
+  boot_sample <- sample(
+    x, # original data
+    size = n, # what sample size
+    replace = TRUE # WITH replacement
+    )
+  
+  # Step 2: calculate the statistic value using this bootstrap sample
+  boot_means[i] <- mean(boot_sample)
+}
+
+```
+
+Our bootstrap sampling distribution is still centered around the original sample mean, not the population mean, but estimating the bias of our statistic is slightly simpler than it was with the jackknife.
+
+```{r}
+#| label: estimate bias using bootstrap
+
+boot_bias <- mean(boot_means) - original_mean
+print(boot_bias)
+
+```
+
+Notice that there is *no* randomness in the jackknife method, but quite a bit of randomness in the bootstrap method. This means that we will not necessarily get an estimated bias of 0, even for unbiased statistics. This also means that we won't necessarily get the same standard error of the mean as using $s/\sqrt{n}$:
+
+```{r}
+#| label: estimate standard error using bootstrap
+
+boot_se <- sd(boot_means) # New way
+sd(x)/sqrt(n)             # Last way
+
+```
+
+The major benefit of the bootstrap is that it "works" (to some degree) no matter what ridiculous statistic you're estimating the standard error of.
+
+```{r}
+#| label: custom statistic function
+my_wacky_function <- function(x){
+  wacky_stat <- median(x)/IQR(x) # some kind of weird not-quite t-statistic?
+  return(wacky_stat)
+}
+```
+
+```{r}
+#| label: estimate standard error of this wacky stat using bootstrap
+
+boot_wacky <- numeric(B)
+set.seed(23)
+  
+for(i in seq_along(boot_wacky)){
+  
+  # Step 1: bootstrap sample (sample w/ replacement)
+  boot_sample <- sample(x, size = n, replace = TRUE)
+  
+  # Step 2: calculate the statistic on the bootstrap sample
+  boot_wacky[i] <- my_wacky_function(boot_sample)
+}
+
+# Step 3: estimate standard error
+sd(boot_wacky)
+```
+
+## Bootstrapping with boot
+
+Writing our own code every time we want to bootstrap something can be annoying. There are a number of different packages in R that will "automate" the tedious parts, and the standard one is `boot`.
+
+```{r}
+#| label: load boot package
+library(boot)
+```
+
+To use the `boot` library, we first have to set up a custom function with two arguments. The first argument represents the dataset (usually a data frame) that we want to resample from and the second argument represents the (row) indices corresponding to the rows.
+
+```{r}
+#| label: boot step 1 - define function
+
+boot_sample_mean <- function(df, ind){
+  # df = data frame containing the original data to sample from
+  # ind = vector of row indices corresponding to the bootstrap sample
+  
+  # Step 1: the bootstrap sample is inherent when we subset df based on ind
+  boot_df <- df[ind, , drop = FALSE]
+  
+  # Step 2: calculate the statistic
+  boot_mean <- mean(boot_df$x)  # Note to self: we better have a column labeled "x"
+  
+  return(boot_mean) # explicitly what is the output
+  
+}
+
+```
+
+Once we set up the function, we pass this function as an argument to `boot`:
+
+```{r}
+#| label: boot step 2 - apply function to bootstrap resamples
+
+sim_data <- data.frame(
+  x = x # column named "x" contains the values in vector x
+)
+set.seed(207)
+
+boot_estimates <- boot(
+  data = sim_data, # original data set we pass into the fn.
+  statistic = boot_sample_mean, # function we wrote earlier
+  R = 999 # takes the place of B in our earlier code
+)
+
+```
+
+### Food for Thought
+
+```{r}
+#| label: investigate the boot object
+
+str(boot_estimates)
+
+```
+
+
+1. What do each of the following components of the output represent? `t0`, `t`, `R`, `data`, `seed`.
+
+
+2. How would you get the bootstrap-estimated standard error of the sample mean using this output?
+
+```{r}
+#| label: bootstrap standard error for simdata_df
+
+sd(boot_estimates$t)
+
+```
+
+## Bootstrapping a Difference of Sample Means
+
+The first rule of resampling is that the method we use to create our resamples should reflect the process by which (we assume or hypothesize) the original sample data was obtained.
+
+Let's use the simulated data from the Permutation Tests activity:
+
+```{r}
+#| label: simulate test scores
+
+n_wynne <- 25
+n_nichols <- 35
+
+mean_wynne <- 70
+mean_nichols <- 70
+sd_wynne <- 10
+sd_nichols <- 10
+
+set.seed(112)
+wynne <- rnorm(n_wynne, mean_wynne, sd_wynne) |>
+  round()
+# |> is equivalent to round(rnorm(insert code)), |> makes it easier to read.
+
+nichols <- rnorm(n_nichols, mean_nichols, sd_nichols) |>
+  round()
+    
+# one of several ways to censor values at a minimum/maximum
+wynne[wynne > 100] <- 100
+wynne[wynne < 0] <- 0
+nichols[nichols > 100] <- 100
+nichols[nichols < 0] <- 0
+
+sim_test_scores <- data.frame(
+  teacher = c(rep("Nichols", n_nichols), rep("Wynne", n_wynne)),   # x variable
+  score = (c(nichols, wynne)    )                                  # y variable
+)
+
+```
+
+Notice here that we are assuming that we observed a sample of size $n_1$ from Group 1 and, independently, a sample of size $n_2$ from Group 2. Therefore, we need to replicate this process with our bootstrap resampling: take a bootstrap sample of size $n_1$ from Group 1 and a bootstrap sample of size $n_2$ from Group 2. This can get a bit tricky with the `boot` package, but is not *too* bad if we split the groups inside the function:
+
+```{r}
+#| label: diff sample means with boot
+
+boot_diff_sample_means <- function(df, ind){
+  # df: og data
+  # ind: the row indices our resample
+  
+  # Step 1: get out bootstrap sample 
+  boot_sample <- df[ind, , drop = FALSE]
+  boot_wynne <- boot_sample[which(boot_sample$teacher == "Wynne"), , drop = FALSE]
+  boot_nichols <- boot_sample[which(boot_sample$teacher == "Nichols"), , drop = FALSE]
+  
+  # Step 2: get our statistic
+  # xbar_nichols <- mean(boot_nichols$score)
+  # xbar_wynne <- mean(boot_wynne$score)
+  # boot_diff_means <- xbar_nichols - xbar_wynne
+  boot_diff_means <- mean(boot_nichols$score) - mean(boot_wynne$score)
+  
+  return(boot_diff_means) # always explicitly return
+  
+}
+
+```
+
+The trickier part is that we need to tell the `boot` function to take a *stratified* random sample with replacement from the original data. We can do this by adding the `strata` argument:
+
+```{r}
+#| label: stratified bootstrap sample
+
+set.seed(114)
+
+boot_estimates_diff_xbar <- boot(
+  data = sim_test_scores,                         # original data set
+  statistic = boot_diff_sample_means,             # function to apply
+  R = 1000,                                       # 1000 bootstrap samples
+  strata = as.factor(sim_test_scores$teacher)     # vector of group values
+                                                  # strata NEEDS TO BE A FACTOR, keeps each                                                      sample group equal
+)
+
+```
+
+```{r}
+#| label: bootstrap sampling dist
+
+hist(boot_estimates_diff_xbar$t)
+
+```
+
+
+
+
+

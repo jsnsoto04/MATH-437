@@ -1,0 +1,247 @@
+---
+title: "Simulation Activity: Permutation-Based Testing"
+subtitle: "Math 437"
+format: html
+editor: source
+---
+
+```{r}
+#| label: load packages
+library(coin) # see "Rank-Based Permutation Tests" later
+```
+
+## General Concept of Conditional Inference
+
+Suppose that we have response variable $Y$ and explanatory variable(s) $X$ measured in the same sample of size $N$. We wish to test the null hypothesis
+
+$$
+H_0: F(Y|X) = F(Y)
+$$
+
+That is, the distribution of $Y$ does not depend on the realized value of $X$.
+
+The **conditional** part of conditional inference comes from **fixing** $X$ at the observed values and conditioning on *all possible* permutations of the observed $Y$. This is doable because under $H_0$, the values $y_1, \ldots, y_N$ are **exchangeable** (the joint distribution is invariant to change of indices).
+
+### Intuition Behind Conditional Inference
+
+Suppose that Math 437 gets really popular and there are two sections, one taught by Dr. Wynne and one taught by Dr. Nichols.
+
+The null hypothesis $F(\text{score}|\text{instructor}) = F(\text{score})$ implies that your grade would be the same *even if you switched instructors*. Therefore, if the null hypothesis is true, we can randomly swap some students between the two classes and get a distribution of grades in the two sections that is "just as likely" to have occurred as the distribution that we actually observed. By repeatedly doing this, we can build up a null distribution of a test statistic *without* making any assumptions about the underlying population distribution of grades.
+
+### Simulated Data
+
+Let's start by simulating data under the null hypothesis $F(\text{score}|\text{instructor}) = F(\text{score})$.
+
+We'll assume that scores are "kind of normally" distributed for both instructors.
+
+```{r}
+#| label: simulate data
+n_wynne <- 25
+n_nichols <- 35
+
+mean_wynne <- 70
+mean_nichols <- 70
+sd_wynne <- 10
+sd_nichols <- 10
+
+set.seed(112)
+wynne <- rnorm(n_wynne, mean_wynne, sd_wynne) |>
+  round()
+# |> is equivalent to round(rnorm(insert code)), |> makes it easier to read.
+
+nichols <- rnorm(n_nichols, mean_nichols, sd_nichols) |>
+  round()
+    
+# one of several ways to censor values at a minimum/maximum
+wynne[wynne > 100] <- 100
+wynne[wynne < 0] <- 0
+nichols[nichols > 100] <- 100
+nichols[nichols < 0] <- 0
+```
+
+## General Permutation Test Framework
+
+Let $X$ be an explanatory variable and $Y$ be a response variable. It doesn't really matter the types; this framework will work whether $X$ and $Y$ are both categorical or both numerical or one of each. We fix the values of the explanatory variable and randomly permute (rearrange) the response values. We then compute the value of a test statistic $T$ for the permuted sample.
+
+When the sample size is small, we repeat this for *every* possible permutation (including the observed one) and construct the exact sampling distribution of $T$. When the sample size is large, we repeat this for a large number $B$ of the possible permutations and approximate the sampling distribution of $T$.
+
+## Pseudocode for Permutation Testing
+
+We will follow the "Math 120" framework for obtaining a p-value for a NHST or Fisher-framework test.
+
+### Step 1
+
+Identify a test **statistic** and compute its value from the observed data
+
+Here we'll use the (unscaled) difference in sample means, but that's not the only statistic we could use. Later in this activity we'll see an alternative test statistic that may be more useful when we have outliers.
+
+```{r}
+#| label: difference of sample means
+
+sim_test_scores <- data.frame(
+  teacher = c(rep("Nichols", n_nichols), rep("Wynne", n_wynne)),  # x variable
+  score = (c(nichols, wynne)    )                                  # y variable
+)
+
+# Now what we need to do is subset the sim_test_scores to each instructor's students
+# Calculate the mean in each group and subtract them
+
+# Step 1: Create a numeric vector for which students are in Nichols
+nichols_students <- which(sim_test_scores$teacher == "Nichols")
+# Returns index numbers for the students in Nichols
+xbar_nichols <- mean(sim_test_scores$score[nichols_students])
+xbar_wynne <- mean(sim_test_scores$score[-nichols_students])
+obs_diff_means <- xbar_nichols - xbar_wynne
+
+```
+
+### Step 2
+
+Estimate the **sampling distribution** of the test statistic under the null hypothesis
+
+Inside a `for` loop, we will perform the following steps:
+
+1. Randomly reorder the indices of the response variable
+2. Recompute the test statistic
+
+```{r}
+#| label: permutation resampling
+
+B <- 999
+sim_diff_means <- numeric(B) # 999 zeroes
+
+set.seed(138)
+
+for (i in seq_along(sim_diff_means)){
+  resample <- sim_test_scores                 # probably inefficient, but doing it here to illustrate what we're resampling
+  resample$score <- sample(resample$score)    # randomly sample from resample$score without replacement, a vector of same length
+  
+  nichols_students <- which(resample$teacher == "Nichols")
+  # Returns index numbers for the students in Nichols
+  xbar_nichols <- mean(resample$score[nichols_students])
+  xbar_wynne <- mean(resample$score[-nichols_students])
+  sim_diff_means[i] <- xbar_nichols - xbar_wynne
+}
+
+```
+
+Finally, we will assume that the original sample *is not* one of the random permutation resamples, but *is* a possible permutation resample, so the original test statistic value should be part of the null distribution.
+
+```{r}
+#| label: build null distribution
+
+all_diff_means <- c(obs_diff_means, sim_diff_means)
+
+```
+
+```{r}
+#| label: graph of null distribution
+
+hist(
+  all_diff_means,
+  main = "Null Distribution of Difference of Average Test Scores",
+  xlab = "Diff of Sample Means (Nichols - Wynne)",
+  ylab = "Number of Permutation Resamples"
+)
+abline(v = obs_diff_means, col = "red4")
+
+```
+
+
+### Step 3
+
+Compare the outputs from Step 1 and Step 2 to estimate the **strength** of evidence against $H_0$/in favor of $H_a$ (the p-value)
+
+```{r}
+#| label: compute p-value
+
+p_left <- mean(all_diff_means <= obs_diff_means)
+# for left sided Ha, "more extreme" means <
+p_right <- mean(all_diff_means >= obs_diff_means)
+# for right sided Ha, "more extreme" means >
+
+# two-sided p-value is not so easily defined
+# Option 1: find the smaller of the two one-sided p-values and double it
+p_two_sided1 <- 2*min(p_left, p_right)
+# Option 2: find the proportion of simulated statistics "as far away or further away" from the expected value of the statistic under H0
+p_two_sided2 <- mean(abs(all_diff_means - 0) >= abs(obs_diff_means - 0))
+# 0 because under H0, the mean of the null distribution should be 0
+```
+
+## Rank-Based Permutation Test: Mann-Whitney U
+
+Suppose we measure a continuous variable $y$ in two different populations. We obtain sample values $y_{11}, y_{12}, \ldots, y_{1m}$ from $F_1$ and $y_{21}, y_{22}, \ldots, y_{2n}$ from $F_2$. We assume that $F_2(x) = F_1(x - \Delta)$ (basically think of this as meaning "everyone's exam score would go up by $\Delta$ points if you had a better teacher"). Our null hypothesis is $H_0: \Delta = 0$.
+
+The Mann-Whitney U Test defines the test statistic as $U = \sum_{i=1}^m \phi_i$, where $\phi_i$ is the number of observations from group 2 ($y_{21}, y_{22}, \ldots, y_{2n}$) that are larger than $y_{1i}$. Generally, the best way of thinking about this statistics is to order *all* of the observations from smallest to largest (as if you were computing an overall median), then write the group numbers below it, then for each "1" count how many "2's" have bigger response values. 
+
+Under $H_0$, $U$ has an approximately normal distribution with mean $\frac{mn}{2}$ and variance $\frac{mn(m+n+1)}{12}$.
+
+R makes an absolute hash of this test. First, R instead defines the statistic $W = \sum_{j=1}^n \phi_j$, where $\phi_j$ is the number of observations from group 1 ($y_{11}, y_{12}, \ldots, y_{1m}$) that are larger than $y_{2j}$. This is generally not a problem with computing p-values as the distribution of $U$ is symmetric about $\mu = \frac{mn}{2}$, thus $P(U \leq u) = P(W \geq w)$; it just makes interpreting the output confusing. Second, $W$ is traditionally used for a different test statistic, $\sum_{j=1}^n S_j$ where $S_j$ is the rank of $y_{2j}$ when all $m+n$ observations are ordered from smallest to largest (using this test statistic instead is called the *Wilcoxon Rank-Sum Test*). Again, this does not really affect p-values, it just makes interpreting the output confusing. Third, R will by default assume that the test statistic has a normal distribution, even at small sample sizes where this approximation is no good. This does affect p-values.
+
+### Doing the Test in R
+
+The best way I have found to do the test is in the `coin` ("**co**nditional **in**ference) package:
+
+```{r}
+#| label: wilcox test gives an error
+#| error: true
+wilcox_test(
+  score ~ teacher, # formula as usual for hypothesis test 
+  data = sim_test_scores, 
+  alternative = "greater", 
+  distribution = "approximate" # Monte Carlo approximation instead of asymptotics
+)
+```
+
+This gives an error because `wilcox_test` *requires* the grouping variable to be a factor variable. We can fix that easily:
+
+```{r}
+#| label: fix the data type and do the test
+
+sim_test_scores$teacher <- 
+  factor(
+    sim_test_scores$teacher,
+    levels = c("Nichols", "Wynne")
+  )
+
+wilcox_test(
+  score ~ teacher, # formula as usual for hypothesis test 
+  data = sim_test_scores, 
+  alternative = "greater", 
+  distribution = "approximate" # Monte Carlo approximation instead of asymptotics
+)
+
+```
+
+Notice that the output gives a test statistic `Z`, the z-score corresponding to the test statistic. To get out the original test statistic, use:
+
+```{r}
+#| label: get out the Wilcoxon Rank-Sum test statistic
+
+wilcox_test(
+  score ~ teacher, # formula as usual for hypothesis test 
+  data = sim_test_scores, 
+  alternative = "greater", 
+  distribution = "approximate" # Monte Carlo approximation instead of asymptotics
+) |>
+  statistic("linear")
+
+```
+
+Note that this is the Wilcoxon Rank-Sum Statistic with ranks summed for group `Nichols`.
+
+### Why Use Rank-Based Permutation Tests?
+
+The permutation t-test works by permuting the actual *data values*, so when we swap two response values, it matters how different (in absolute value) those values are. When we have outliers, it is common to see funny-looking multimodal null distributions reflecting the influence of the outlier(s).
+
+In contrast, the Mann-Whitney test works by permuting the *ranks*, so the absolute difference between the values doesn't matter, only how many other observations are between the swapped values. This makes the null distribution of the test statistic much closer to normal when we have outliers. The Mann-Whitney test also works when your data is already is rank format (and you don't have access to the "raw data" from which those ranks were derived).
+
+One caveat: you may see books or websites advocating to use the Mann-Whitney U test or similar rank-based permutation tests to test a null hypothesis of equivalence of medians. This is all sorts of wrong when the (fairly strong) assumption that the distributions have equivalent shapes and variability under both $H_0$ and $H_a$ is not supported by the sample data. It's best to think of the Mann-Whitney U test as answering the question, "how likely is it that a random observation from Group 1 is smaller than a random observation from Group 2?" (and in fact this is how it was originally presented by Mann and Whitney back in the 1940's - see the paper on Canvas if interested), which allows us to relax the assumption that the two distributions differ only in location.
+
+## Beyond Two Means
+
+Any time we are testing a null hypothesis of independence, and can assume exchangeability under the null hypothesis, we can perform a permutation-based test in the conditional inference framework. This includes:
+
+* Testing the equivalence of multiple means in ANOVA (see, e.g., the Kruskal-Wallis and Friedman tests for rank-based ANOVA equivalents)
+* Testing the equivalence of distributions between groups in a $\chi^2$ test of independence
+* Testing the independence of the response variable and the (set of) predictor variable(s) in a simple or multiple linear regression model

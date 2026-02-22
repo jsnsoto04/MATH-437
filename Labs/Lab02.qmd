@@ -1,0 +1,488 @@
+---
+title: "Lab Assignment #2"
+author: "Math 437 - Modern Data Analysis - Jason Soto"
+format: pdf
+editor: source
+---
+
+## Introduction
+
+In this lab, we will explore the family-wise error rate (FWER) and false discovery rate (FDR), and then we will do some nonparametric testing using a permutation-based t-test.
+
+## Good Practice
+
+Remember that we want to include two chunks at the beginning of each of our lab notebooks: the first loads all the packages we will be using and the second loads all the data.
+
+Here I've added some new code with the `here` package to specify exactly where inside my project folder this lab notebook is. Generally, if you're doing this, you want `here::i_am("relative path to file")` to be the very first line of your notebook.
+
+```{r}
+#| label: load packages
+here::i_am("Labs/Lab02.qmd")
+# change the name/capitalization of your Labs folder if necessary
+
+# Now we load all the packages we'll use in the lab
+library(ISLR2)
+
+```
+
+To import a dataset you have downloaded (for example, datasets I give you on Canvas), first **move the dataset out of your Downloads folder** and into a folder set up specifically for data (ideally, a subfolder of your project).
+
+If you followed the instructions to set up your file structure for Math 437 and create a project for your work, the example chunk below should import the data correctly (possibly you will have to change the folder name from "Data" to whatever you named it).
+
+```{r}
+#| label: load data
+#| message: false
+#| warning: false
+alcohol <- readr::read_csv(here::here("Data/alcohol.csv"))
+```
+
+If it didn't work, then find the *Environment* panel and click *Import Dataset*. Select the right type of file (you typically want `From Text (readr)` for my csv files), click *Browse* and find the file, then copy the *Code Preview* section and overwrite the example chunk. Note that the code to import your dataset now includes your entire file structure, which means that other people won't be able to replicate your data import.
+
+This lab assignment is worth a total of **12.5 points**.
+
+## Problem 1: FWER and FDR (4.5 pts total)
+
+### Part a (Code: 1.5 pts)
+
+ISLR Labs 13.6.1, 13.6.2, and 13.6.3.
+
+#### Solution
+
+Remember that every time you see a new chunk in the lab, create a new chunk in the Quarto document and *manually type in* the code in the chunk, then run that code.
+
+You do not need to `label` each chunk, but it may be helpful if you are working with R for the first time.
+
+```{r}
+#| label: First Chunk 13.6.1
+
+set.seed(6)
+x <- matrix(rnorm(10 * 100), 10, 100)
+x[, 1:50] <- x[, 1:50] + 0.5
+
+```
+
+```{r}
+#| label: Second Chunk 13.6.1
+
+t.test(x[, 1], mu = 0)
+
+```
+
+```{r}
+#| label: Third Chunk 13.6.1
+
+p.values <- rep(0, 100)
+for (i in 1:100)
+  p.values[i] <- t.test(x[, i], mu = 0)$p.value
+decision <- rep("Do not reject H0", 100)
+decision[p.values <= .05] <- "Reject H0"
+
+table(decision, c(rep("H0 is False", 50), rep("H0 is True", 50)))
+
+```
+
+```{r}
+#| label: Fourth Chunk 13.6.1
+
+x <- matrix(rnorm(10 * 100), 10, 100)
+x[, 1:50] <- x[, 1:50] + 1
+for (i in 1:100)
+  p.values[i] <- t.test(x[, i], mu = 0)$p.value
+decision <- rep("Do not reject H0", 100)
+decision[p.values <= .05] <- "Reject H0"
+table(decision, c(rep("H0 is False", 50), rep("H0 is True", 50)))
+
+```
+
+```{r}
+#| label: First Chunk 13.6.2
+
+m <- 1:500
+fwe1 <- 1 - (1 - 0.05)^m
+fwe2 <- 1 - (1 - 0.01)^m
+fwe3 <- 1 - (1 - 0.001)^m
+
+```
+
+```{r}
+#| label: Second Chunk 13.6.2
+
+par(mfrow = c(1, 1))
+plot(m, fwe1, type = "l", log = "x", ylim = c(0, 1), col = 2, ylab = "Family - Wise Error Rate", xlab = "Number of Hypotheses")
+lines(m, fwe2, col = 4)
+lines(m, fwe3, col = 3)
+abline(h = 0.05, lty = 2)
+
+```
+
+```{r}
+#| label: Third Chunk 13.6.2
+
+library(ISLR2)
+fund.mini <- Fund[, 1:5]
+t.test(fund.mini[, 1], mu = 0)
+fund.pvalue <- rep(0, 5)
+for (i in 1:5)
+  fund.pvalue[i] <- t.test(fund.mini[, i], mu = 0)$p.value
+fund.pvalue
+
+```
+
+```{r}
+#| label: Fourth Chunk 13.6.2
+
+p.adjust(fund.pvalue, method = "bonferroni")
+pmin(fund.pvalue * 5, 1)
+
+```
+
+```{r}
+#| label: Fifth Chunk 13.6.2
+
+p.adjust(fund.pvalue, method = "holm")
+
+```
+
+```{r}
+#| label: Sixth Chunk 13.6.2
+
+apply(fund.mini, 2, mean)
+
+```
+
+```{r}
+#| label: Seventh Chunk 13.6.2
+
+t.test(fund.mini[, 1], fund.mini[, 2], paired = T)
+
+```
+
+```{r}
+#| label: Eight Chunk 13.6.2
+
+returns <- as.vector(as.matrix(fund.mini))
+manager <- rep(c("1", "2", "3", "4", "5"), rep(50, 5))
+a1 <- aov(returns ~ manager)
+TukeyHSD(x = a1)
+plot(TukeyHSD(x = a1))
+
+```
+
+```{r}
+#| label: First Chunk 13.6.3
+
+fund.pvalues <- rep(0, 2000)
+for (i in 1:2000)
+  fund.pvalues[i] <- t.test(Fund[, i], mu = 0)$p.value
+
+```
+
+```{r}
+#| label: Second Chunk 13.6.3
+
+q.values.BH <- p.adjust(fund.pvalues, method = "BH")
+q.values.BH[1:10]
+
+```
+
+```{r}
+#| label: Third Chunk 13.6.3
+
+sum(q.values.BH <= .1)
+
+sum(fund.pvalues <= (0.1 / 2000))
+
+```
+
+```{r}
+#| label: Fourth Chunk 13.6.3
+
+ps <- sort(fund.pvalues)
+m <- length(fund.pvalues)
+q <- 0.1
+wh.ps <- which(ps < q * (1:m) / m)
+if (length(wh.ps) >0) {
+  wh <- 1:max(wh.ps)
+  } else {
+    wh <- numeric(0)
+}
+
+```
+
+```{r}
+#| label: Fifth Chunk 13.6.3
+
+plot(ps, log = "xy", ylim = c(4e-6, 1), ylab = "P-Value", xlab = "Index", main = "")
+points(wh, ps[wh], col = 4)
+abline(a = 0, b = (q / m), col = 2, untf = TRUE)
+abline(h = 0.1 / 2000, col = 3)
+
+```
+
+### Part b (Computation and/or Explanation: 1 pt)
+
+Using the output of Lab 13.6.1, estimate the power of this test to detect each of the two alternative hypotheses $\mu = 0.5$ and $\mu = 1$.
+
+#### Solution
+
+```{r}
+#| label: First Chunk b
+
+x <- matrix(rnorm(10 * 100), 10, 100)
+x[, 1:50] <- x[, 1:50] + 1
+for (i in 1:100)
+  p.values[i] <- t.test(x[, i], mu = .5)$p.value
+decision <- rep("Do not reject H0", 100)
+decision[p.values <= .05] <- "Reject H0"
+table(decision, c(rep("H0 is False", 50), rep("H0 is True", 50)))
+
+```
+
+```{r}
+#| label: Second Chunk b
+
+x <- matrix(rnorm(10 * 100), 10, 100)
+x[, 1:50] <- x[, 1:50] + 1
+for (i in 1:100)
+  p.values[i] <- t.test(x[, i], mu = 1)$p.value
+decision <- rep("Do not reject H0", 100)
+decision[p.values <= .05] <- "Reject H0"
+table(decision, c(rep("H0 is False", 50), rep("H0 is True", 50)))
+
+```
+
+Hence Power = 1-17/50 = .66 when mu = .5 and Power = 1-40/50 = .2 when mu = .5
+
+### Part c (Code: 1.5 pts)
+
+Finish writing the `FDR_plot` function below by copying and pasting the code from the last two chunks of ISLR Lab 13.6.3. This function takes two arguments as inputs: `p.values`, a vector of p-values, and `q`, the desired False Discovery Rate. You will need to replace variables and hard-coded values in the code you copied with `p.values` and `q` so that the function runs.
+
+Once the function works correctly, call the function and produce graphs like those in Figure 13.6 from the outputs. (Assume that on the graphs, $q$ and $\alpha$ are set to the same value.)
+
+#### Solution
+
+```{r}
+#| label: FDR_plot function
+FDR_plot <- function(p.values, q){
+  
+  # Copy code from the last two chunks of ISLR Lab 13.6.3, but replace variable names and hard-coded values as necessary
+  
+  # Since the main goal of this function is to produce a plot,
+  # we "invisibly" return a vector with the significant p-values
+  
+ps <- sort(p.values)
+m <- length(p.values)
+wh.ps <- which(ps < q * (1:m) / m)
+if (length(wh.ps) >0) {
+  wh <- 1:max(wh.ps)
+  } else {
+    wh <- numeric(0)
+  }
+
+plot(ps, log = "xy", ylim = c(4e-6, 1), ylab = "P-Value", xlab = "Index", main = "")
+points(wh, ps[wh], col = 4)
+abline(a = 0, b = (q / m), col = 2, untf = TRUE)
+abline(h = q / m, col = 3)
+  
+  invisible(wh.ps)
+}
+```
+
+```{r}
+#| label: ISLR Figure 13.6 left panel
+
+FDR_plot(fund.pvalues, .05)
+
+```
+
+```{r}
+#| label: ISLR Figure 13.6 right panel
+
+FDR_plot(fund.pvalues, .3)
+
+```
+
+### Part d (Code: 0.5 pts)
+
+Apply your function from Part c on the simulated set of p-values in the chunk below, using $q = 0.1$, and produce a graph similar to those from Part b.
+
+```{r}
+#| label: simulate p-values ex
+set.seed(12)
+sim_pvalues <- runif(1000, min = 1e-5, max = 0.05001)
+```
+
+#### Solution
+
+```{r}
+#| label: simulate p-values
+
+FDR_plot(sim_pvalues, .1)
+
+```
+
+## Problem 2: The `p.adjust` Function (4 pts total)
+
+Consider the following set of five p-values:
+
+```{r}
+#| label: fake p-values
+
+sim_pvalues2 <- c(0.02, 0.03, 0.06, 0.15, 0.25)
+```
+
+### Part a (Code and Explanation: 1 pt)
+
+Apply the `p.adjust` function with `method = "bonferroni"` to this set of p-values. Explain precisely what this method does. Pay special attention to what `p.adjust` does with the value `0.25`.
+
+#### Solution
+
+```{r}
+#| label: P adjust 1
+
+p.adjust(sim_pvalues2, method = "bonferroni")
+
+```
+
+What Bonferroni does is returns p values after being multiplied by the number of comparisons. In this case, 5 p-values, so each p-value is multiplied by 5, with .25 capping at 1.00 since p-values are probabilities.
+
+### Part b (Code and Explanation: 1 pt)
+
+Apply the `p.adjust` function with `method = "holm"` to this set of p-values. Explain precisely what this method does. Pay special attention to the last two p-values.
+
+#### Solution
+
+```{r}
+#| label: P adjust 2
+
+p.adjust(sim_pvalues2, method = "holm")
+
+```
+
+What Holm does is before a p-value is returned is similar to Bonferroni, except instead of multiplying by just the number of comparisons, it is multiplied by that said number + 1 - i, with i being the index of the order of the affected p-value. Though, the final value should be .25 following this, the reason it is .30 is because in this method, p-values must stay in order from small to big, hence, to retain validity, .25 must be adjusted to at least the same value as the p-value before, which is .30. This method is less conservative than the last and retains a greater power which means fewer Type II Errors.
+
+### Part c (Code and Explanation: 1 pt)
+
+Apply the `p.adjust` function with `method = "BH"` to this set of p-values. Explain precisely what this method does. Pay special attention to the first two p-values.
+
+#### Solution
+
+```{r}
+#| label: P adjust 3
+
+p.adjust(sim_pvalues2, method = "BH")
+
+```
+
+What BH does is very similar to Holm, except it multiplies the p-value by the quantity, and divides by the placement of the p-value. Another difference is that .02 was sized down to be equivalent to .075. So when the adjusted p-value is bigger than the value to it's right, it is sized down to an equivalent. This method is less conservative than the last and retains a greater power which means fewer Type II Errors.
+
+### Part d (Explanation: 1 pt)
+
+Why does it make more sense for R to adjust the p-values rather than the significance level?
+
+#### Solution
+
+It make more sense for R to adjust the p-values rather than the significance level because I would assume it makes p-values can be easily comparable with other datasets and stuff like that.
+
+Nevermind, that's what I thought it was, it is solely because it knows what the p-value is and not the significance level.
+
+## Problem 3: Permutation Test for Comparing Two Means (4 pts total)
+
+24 "alcohol-dependent" male patients at an alcohol treatment facility were randomly assigned to a traditional treatment program (Control) or a treatment program plus social skills training (SST). 23 patients faithfully reported their alcohol intake for a year (one patient in the SST group never reported). Their group assignment, and alcohol intake over the year (in centiliters of pure alcohol), is found in the *alcohol.csv* dataset on Canvas.
+
+Using a permutation t-test, we wish to determine whether there is convincing evidence of a difference in population mean alcohol consumption between patients using the SST program and patients using a traditional treatment program.
+
+### Part a (Explanation: 1 pt)
+
+Specify the null and (two-sided NHST) alternative hypothesis using both words and math.
+
+#### Solution
+
+The null hypothesis would be that there is no difference in effectiveness between the two programs. The alternative is that a difference between them exists.
+
+H0: mu1 = mu2 & Ha: mu1 /= mu2
+
+### Part b (Code: 1.5 pts)
+
+Construct a graph showing the permutation null distribution of t-statistics. Use 999 random permutation resamples. Include a vertical line at the observed value.
+
+#### Solution
+
+```{r}
+#| label: Permutation Test w/ T.Test
+
+set.seed(67)
+
+B <- 999
+sim_t <- numeric(B) # 999 zeroes
+
+for (i in seq_along(sim_t)){
+  resample <- alcohol                 # probably inefficient, but doing it here to illustrate what we're resampling
+  resample$Intake <- sample(resample$Intake)    # randomly sample from resample$Intake without replacement, a vector of same length
+  
+  SST <- which(resample$Group == "SST")         # Returns index numbers for each group
+  CTRL <- which(resample$Group == "Control")
+
+  
+  sim_t[i] <- t.test(resample$Intake[SST], resample$Intake[CTRL])$statistic
+}
+
+```
+
+```{r}
+#| label: Obs
+
+  SST <- which(alcohol$Group == "SST") 
+  CTRL <- which(alcohol$Group == "Control")
+
+obs_t <- t.test(alcohol$Intake[SST], alcohol$Intake[CTRL])$statistic
+
+```
+
+```{r}
+#| label: build null distribution
+
+null_dist <- sim_t
+
+```
+
+```{r}
+#| label: graph of null distribution
+
+hist(
+  null_dist,
+  main = "Null Distribution of Difference Alcoholic Programs",
+  xlab = "Diff of Sample Means (SST - TT)",
+  ylab = "Number of Permutation Resamples"
+)
+abline(v = obs_t, col = "blue")
+
+```
+Note: R runs properly, render does not load the line correctly, should be between -2 and -1
+
+
+### Part c (Code: 0.5 pts)
+
+Using the permutation null distribution, obtain the p-value for the two-sided test.
+
+#### Solution
+
+```{r}
+#| label: P-Value
+
+p_value <- mean(abs(sim_t) >= abs(obs_t))
+p_value
+
+```
+Note: R runs properly, render does not load p-value, I got, 
+[1] 0.19219219
+
+### Part d (Explanation: 1 pt)
+
+Is there is convincing evidence of a difference in population mean alcohol consumption between patients using the SST program and patients using a traditional treatment program? Why or why not?
+
+#### Solution
+
+There is no convincing evidence in the difference because my found (maybe wrong) p-value is over than .05.
+Though, we do see a skew to the left in the bar graph, implying that SST is the superior treatment.
+
