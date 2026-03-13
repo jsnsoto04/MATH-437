@@ -336,6 +336,6 @@ Holding difficulty constant, which of the following instructors would be predict
 
 #### Solution
 
-The highest overall rating should be the Assistant Professor. This because other 2 ranks have negative effects, while assistant has none at all in our least square lines. Attractive has positive effect, while chopped has none.
+The highest overall rating should be the Most-Attractive Assistant Professor. This because other 2 ranks have negative effects, while assistant has none at all in our least square lines. Attractive has positive effect, while chopped has none.
 
 The lowest overall rating should be the Less-Attractive Associate Professor. Using the same idea, no positive effect is given due to looks. Assistant professor also has the most negative impact due to its coefficient.

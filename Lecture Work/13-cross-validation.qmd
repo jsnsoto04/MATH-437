@@ -1,0 +1,356 @@
+---
+title: "Activity: Model Tuning with Cross-Validation"
+subtitle: "Math 437"
+format: html
+editor: source
+---
+
+## Model Tuning
+
+The goal of "model tuning" is to pick a value for one or more *hyperparameters* of the model. Hyperparameters are model parameters that **cannot** be estimated from the data and must be pre-specified. For example, in a polynomial regression model:
+
+* The coefficients of the polynomial terms are parameters that can be estimated from the data
+* The degree of the polynomial is a hyperparameter because we have to specify it before fitting the model
+
+Proper choices of these hyperparameters can be the difference between a model that works amazingly well and a model that works terribly.
+
+## A Simple Dataset
+
+The [Restrain Food Database](https://restrain.shinyapps.io/restrainfooddatabase/) was "designed by Cardiff University scientists [to] help people lose weight and eat more healthily."
+
+The database contains 520 images of foods that should be familiar to people living in the UK. Each food is rated for healthiness, taste, and the strength of cravings for the food on a scale from 0-100.
+
+Today we will be trying to predict just whether a food is a fruit or a vegetable. We will use 
+
+```{r}
+#| label: import data and packages
+#| message: false
+#| warning: false
+library(tidyverse)
+library(tidymodels)
+
+Restrain <- readr::read_csv(here::here("Data/Restrain.csv"))
+
+# We only care about predicting fruits vs vegetables
+fv <- Restrain |>
+  filter(SubCategory %in% c("Fruits", "Vegetables"))
+
+fv$SubCategory <- factor(fv$SubCategory, levels = c("Fruits","Vegetables"))
+```
+
+```{r}
+#| label: split training-holdout
+
+set.seed(130)
+
+fv_split <- initial_split(
+  data = fv,
+  prop = .80     # 80% in the training set
+)
+
+fv_train <- training(fv_split)
+fv_test <- testing(fv_split)
+
+```
+
+So we have a fairly small training set (83 foods) and test set (21 foods). We probably shouldn't expect to get amazing results, but at the same time our datasets are small enough that we can actually see what's going on.
+
+```{r}
+#| label: plot taste data
+
+X
+
+```
+
+We can see that vegetables tend to taste worse than fruits, but there is some overlap between the two categories. We would like to use logistic regression with polynomial basis functions to predict whether a food is a fruit or a vegetable based on its taste. We will tune the degree of the polynomial.
+
+## Leave One Out Cross-Validation (LOOCV)
+
+In LOOCV, we fit the model using every point in the training set except for one, then make predictions on that last point.
+
+With model tuning, we need nested for loops:
+
+1. One for loop to indicate which observation we are removing from the training set.
+2. One or more for loops to indicate which parameter(s) we are tuning.
+
+First we create a list to store our predictions in. Setting this list up is a bit of work:
+
+```{r}
+#| label: set up loocv
+
+x
+
+```
+
+Now we create our for loops. Remember that the `glm` function predicts the probability of being in the *second* class because the *first* class is considered the reference level.
+
+```{r}
+#| label: loocv with for loops
+
+x
+
+```
+
+Now we have 4 lists nested within `loocv_predictions`. Each list contains 83 predictions of observations in the training set - each prediction made by running logistic regression on the other 82 points in the training set.
+
+We can get the LOOCV estimate of the test error rate using each value of `k`:
+
+```{r}
+#| label: loocv test error rate
+
+x
+
+```
+
+
+1. Briefly explain how to read this graph.
+
+Now that we know that the degree-3 polynomial produces the lowest LOOCV error rate, we can fit the model on all 83 points using that degree:
+
+```{r}
+#| label: final logistic fit
+
+x
+
+```
+
+As you can imagine, with a much larger training set and/or a much larger parameter space to search over, LOOCV becomes incredibly computationally expensive.
+
+## K-Fold Cross-Validation
+
+K-fold cross-validation divides the training data into K validation sets ("folds") of roughly-equal size, then fits the model on the remaining K-1 folds. Note that when $K = n$ we have LOOCV.
+
+We can no longer easily store the individual predictions. So here each entry in the `kfold_misclassification` list is a vector containing the estimated misclassification rate (say) on each fold.
+
+```{r}
+#| label: set up the k folds
+
+x
+
+```
+
+```{r}
+#| label: kfold with for loops
+
+```
+
+Note that we now have a distribution of misclassification rates at each degree of the polynomial. We can summarize the distribution in a couple of different ways:
+
+Option 1: Average the misclassification rates. The easiest way to do this is with the `map` functions in the `purrr` package:
+
+```{r}
+#| label: average error rate with purrr::map_dbl
+
+```
+
+Generally, when multiple models are close, we recognize that a slightly different fold reassignment could produce slightly different error rates, and compute the corresponding "cross-validated standard error" of the average misclassification rate (or other measure of inaccuracy).
+
+```{r}
+#| label: cross-validated standard error
+
+```
+
+We can then find the "simplest" model whose error rate is within one standard error of the "best" misclassification rate. In general, "simpler" means "higher bias, lower variance."
+
+```{r}
+#| label: find simplest model within 1 se of best
+
+
+```
+
+1. Which model should we select and why?
+
+Option 2: Instead of averaging the error rates, assume the *worst* - this will involve either minimizing or maximizing depending on what measure of (in)accuracy you're using.
+
+```{r}
+#| label: minimax
+
+```
+
+At this point it's a judgment call, but statisticians generally prefer higher-bias models to higher-variance models when we don't have a ton of data.
+
+```{r}
+#| label: final logistic fit - kfold
+
+
+```
+
+## K-Fold Cross-Validation with tidymodels
+
+We're going to rely heavily on three packages: `rsample`, which we've seen before, will do the cross-validation splits; `dials` will set up our search grid, and `tune` will actually do the tuning. You also might see some references to `hardhat`, which is where some of these functions actually "live."
+
+For k-fold cross-validation with `tidymodels`, the function to do the splitting is `vfold_cv`. Presumably this is because some models have hyperparameters named `k` but nothing I can think of has a hyperparameter named `v`. 
+
+Remember that we want to split the *training set only* and that we should set a seed for reproducible splitting.
+
+```{r}
+#| label: tidy k-fold splitting
+
+set.seed(117)
+
+fv_cv <- vfold_cv(
+  fv_train,     # training set to split
+  v = 5,     # number of folds - by default v = 10
+  repeats = 2     # just to show repeats without killing computer
+)
+
+```
+
+1. What do the `v` and `repeats` arguments to `vfold_cv` govern?
+
+The `vfold_cv()` function can also do stratified random sampling to ensure that every fold has (roughly) equal proportions of a particular variable (e.g., the response variable) within each fold. To do this, pass the name of stratifying variable in for the `strata` argument.
+
+Next we create our model and pre-processing recipe:
+
+```{r}
+#| label: logistic regression with tune
+
+logr_wflow <- workflow()
+
+logr_model <- logistic_reg(
+  mode = "classification",
+  engine = "glm"
+)
+
+logr_recipe <- recipe(
+  SubCategory ~ Taste + Healthiness + Cravings,
+  data =  fv_train
+) |>
+  step_poly(Taste, degree = tune())
+
+logr_wflow <- logr_wflow |>
+  add_model(logr_model) |>
+  add_recipe(logr_recipe)
+
+```
+
+Notice the function `tune()` here: this indicates that we intend to tune this parameter of the model. We can extract all the parameters we intend to tune:
+
+```{r}
+#| label: extract parameters
+
+logr_wflow |>
+  extract_parameter_set_dials()
+
+```
+
+We have to tell tidymodels the search space for each parameter. There are a few functions that will create defaults, such as `grid_random` and `grid_regular`, but for finer user-defined control, `expand.grid` in base R is actually the best!
+
+```{r}
+#| label: set up parameter grid
+
+param_grid <- expand.grid(
+  degree = seq(1, 4)     # factor name = c(vector of values)
+  # seq is sequence, better than c(1, 2, 3, 4)
+)
+
+```
+
+Finally, we search over the entire grid using our cross-validation:
+
+```{r}
+#| label: tune model
+
+logr_tune <- tune_grid(
+  logr_wflow,     # workflow to tune
+  resamples = fv_cv,     # tibble with instructions to k-fold cv
+  grid = param_grid,    # grid of hyperparameters values to search over
+  metrics = metric_set(accuracy, brier_class, roc_auc)
+  # accuracy metrics - give the same name of the function in yardstick, without quotes
+)
+
+```
+
+Now we investigate graphically what we get out:
+
+```{r}
+#| label: investigate tuning with autoplot
+
+autoplot(logr_tune)
+
+```
+
+By default, tidymodels computes the accuracy, Brier score, and AUC for each fold, which is stored in `logr_tune$.metrics`. Since we get one tibble out for each fold, it's a bit unwieldy to investigate manually, but the `autoplot` function allows us to visualize the averages graphically.
+
+```{r}
+#| label: collect metrics
+
+collect_metrics(logr_tune)
+
+```
+
+We can now `finalize` our workflow:
+
+```{r}
+#| label: show the best
+
+logr_tune |>
+show_best(metric = "brier_class")
+
+```
+
+Option 1: Pick hyperparameter value that optimizes accuracy metric's mean (over all folds)
+
+Option 2: Pick the *simplest* model whose mean accuracy metric is within 1 SEM of the "best"
+
+```{r}
+#| label: select the best model by option 1 or option 2
+
+best_by_brier <- select_best(
+  logr_tune,
+  metric = "brier_class"
+)
+
+best_by_1se <- select_by_one_std_err(
+  logr_tune,
+  metric = "brier_class",
+  # How to sort the data frame
+  degree
+)
+
+```
+
+
+```{r}
+#| label: finalize workflow
+
+logr_wflow_final <- finalize_workflow(
+  logr_wflow,
+  parameters = list(degree = 2)     # manual list of parameters
+)
+
+logr_wflow_final2 <- finalize_workflow(
+  logr_wflow,
+  parameters = best_by_brier
+)
+
+logr_wflow_final
+
+logr_wflow_final2
+
+```
+
+If we want a better estimate of variability in the test error rate:
+
+```{r}
+#| label: re-fit the model on the k-folds
+
+logr_kfold <- fit_resamples(
+  logr_wflow_final,
+  resamples = fv_cv
+)
+
+collect_metrics(logr_kfold)
+
+```
+
+
+## Other Data-Splitting Functions in `rsample`
+
+We can use the `loo_cv` function to do leave-one-out cross-validation, but because it's computationally expensive, the rest of `tidymodels` doesn't necessarily play nice with it. 
+
+The `mc_cv` function performs Monte Carlo cross-validation: instead of randomly dividing the dataset up into `K` non-overlapping folds, it chooses a new validation set at random from the training set on each iteration. Once you set up all of your randomly selected validation sets, the rest of the procedure works similarly to repeated k-fold cross-validation.
+
+The `bootstraps` function will randomly choose bootstrap resamples from the training set; the rows that were *not* included in each bootstrap resample form a natural validation set called the "out-of-bag" (OOB) sample. We will revisit this idea later.
+
+

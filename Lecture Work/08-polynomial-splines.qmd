@@ -335,12 +335,35 @@ Since natural splines constrain the function to be linear outside the support of
 ```{r}
 #| label: natural spline basis
 
+natural_spline_basis <- with(simdata,
+                             ns(x, df = 4))
+# We have 2 boundary knots but gain back 4 df, so with 6 df for bs() we have 4df for ns()
+
+str(natural_spline_basis)
+
 ```
 
 `ns` requires cubic splines, whereas `bs` has a `degree` argument that is 3 by default.
 
 ```{r}
 #| label: predict with ns
+
+lm_natural_splines <- lm(
+  y ~ ns(x,4),
+  data = simdata
+)
+
+lm_ns_predictions <- predict(
+  lm_natural_splines,
+  newdata = new_x2
+)
+
+plot(y ~ x, data = simdata, xlim = c(-5, 20))   # original data to fit a model to
+lines(xlims2, lm_quadratic_predictions2, col = "blue", lwd = 2)
+lines(xlims2, lm_quintic_predictions, col = "darkgreen", lwd = 2)
+lines(xlims2, lm_splines_predictions, col = "darkorange", lwd = 2)
+lines(xlims2, lm_3knots_predictions, col = "purple4", lwd = 2)
+lines(xlims2, lm_ns_predictions, col = "deeppink", lwd = 2)
 
 ```
 
@@ -350,6 +373,10 @@ Notice that the natural cubic spline is the only one that even sort-of catches t
 
 ```{r}
 #| label: ns with pre-specified knots
+
+natural_splines_basis2 <- with(simdata,
+                               ns(x, knots = c(0, 5, 10)))
+str(natural_splines_basis2)
 
 ```
 

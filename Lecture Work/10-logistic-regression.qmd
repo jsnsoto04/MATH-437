@@ -1,0 +1,431 @@
+---
+title: "Simulation Activities: Logistic Regression"
+subtitle: "Math 437"
+format: html
+editor: source
+---
+
+## Simulating for Logistic Regression
+
+Almost everything for logistic regression works the same way as linear regression on the side of the predictors, so to make things easier we'll just simulate with 1 x-variable. However, in classification problems, our outcome variable is *categorical*, which means that instead of modeling the expected value of the response variable, we are modeling the probability of an observation being in each class.
+
+Since logistic regression requires a *binary* (two category) outcome, we can model the probability of being in the "positive" class $p$ and then the probability of being in the "negative" class is $1 - p$.
+
+```{r}
+#| label: simulate for logistic regression
+
+## THE TRUE MODEL
+set.seed(124)
+x <- rnorm(500, mean = 5, sd = 3)
+
+# Just like with simple linear regression
+beta0 <- -2
+beta1 <- .5
+
+## PROBLEM #1
+y <- beta0 + beta1 * x
+plot(x,y)
+# y is supposed to be a class!
+# so this does not work!
+# What if we think y is a probability?
+# this can not be a probability!
+
+```
+
+```{r}
+#| label: actually simulate some useful data
+
+logit_p <- beta0 + beta1 * x
+odds <- exp(logit_p)           # e^stuff
+p = odds/(1+odds)              # now we have probability of being in the positive class
+
+set.seed(138)
+y_numeric <- rbinom(500 , size = 1, prob = p)
+# 500 because length of x, 1 because this Bernoulli(p)
+
+class <- ifelse(y_numeric == 1, "Positive", "Negative")
+
+simdata <- data.frame(
+  x = x,
+  class = as.factor(class)
+)
+
+head(simdata)
+
+```
+
+
+### Food For Thought
+
+Notice that there is no $\epsilon_i$ term anywhere in the true model. Where is the randomness?
+
+Since we are doing rbinom, there is the randomness.
+
+## The Logistic Regression Model
+
+The basic modeling machinery is *very* picky about character vectors as the response variable, and we need to convert to factor. It's generally a good idea to do this anyway.
+
+```{r}
+#| label: convert response to factor
+
+```
+
+The workhorse function is `glm`, which stands for Generalized Linear Model.
+
+```{r}
+#| label: most common glm error
+#| error: true
+
+glm(
+  class ~ x,
+  data = simdata
+)
+
+```
+
+If you get this completely confusing error, you have forgotten the `family` argument. The form of a generalized linear model is:
+
+$$
+f(\mu_Y) = \beta_0 + \beta_1x_1 + \ldots + \beta_p x_p
+$$
+
+The exact function $f(\cdot)$ depends on the distribution family that $Y|X$ is assumed to come from. If no `family` is specified, then $f(\cdot)$ is assumed to be the identity function and `glm` will perform linear regression.
+
+Here $Y|X$ should have a Bernoulli distribution with mean $\mu_Y = p$, and the function $f(\mu_Y) = log(\frac{p}{1-p})$, sometimes known as the "logit" or "log-odds" of p.
+
+```{r}
+#| label: correct way to specify logistic regression
+
+logr_model1 <- glm(
+  class ~ x,
+  data = simdata,
+  family = "binomial"
+)
+
+summary(logr_model1)
+
+```
+
+The `family = binomial` argument tells R to use this $f(\mu_Y)$ instead.
+
+### Theory Deep Dive
+
+The approach of generalized linear models (glms) is to model the pdf/pmf $f(y|x, \theta)$ as a distribution coming from the exponential family. The *exponential family* is the set of distributions for which $f(y | \theta)$ can be written in the form
+
+$$
+f(y | \theta) = a(\theta) b(x) e^{c(\theta) d(x)}
+$$
+
+Technically there's a sum inside the exponent if we have multiple $\theta$ parameters, but for the purposes of glms we typically assume all but one parameter are fixed.
+
+A *link function* $l(\cdot)$ is a function for which $l(\mu_Y) = c(\theta)$. For example, consider the gamma distribution parametrized as
+
+$$
+f(x | \alpha, \beta) = \frac{1}{\Gamma(\alpha) \beta^\alpha}x^{\alpha - 1}e^{-\frac{x}{\beta}}
+$$
+with $\alpha$ known. Then $a(\theta) = \frac{1}{\Gamma(\alpha) \beta^\alpha}$, $b(x) = x^{\alpha - 1}$, $c(\theta) = \frac{1}{\beta}$, and $d(x) = -x$.
+
+The mean of this distribution is $\alpha \beta$, or $\frac{\alpha}{c(\theta)}$, therefore the link function is the inverse function and we are really modeling $\frac{1}{\mu} = \beta_0 + \beta_1 x$. We can specify this in R using the argument `family = Gamma(link = "inverse")`.
+
+For logistic regression, we should really use `family = binomial(link = "logit")`, but since the default link function when `family = binomial` is the logit function, `family = binomial` suffices.
+
+For more information, see Section 4.6.3 of ISLR and, if you really want to go deeper into the math, Section 3.4 and Chapter 12 of *Probabilistic Machine Learning*.
+
+## Interpreting a Logistic Regression Model
+
+```{r}
+#| label: logistic regression summary
+
+summary(logr_model1)
+
+```
+
+The most obvious problem here is that the `summary` function does not tell us whether we are fitting the probability of the Positive or Negative class. A check to `contrasts` will help:
+
+```{r}
+#| label: check contrasts
+
+contrasts(simdata$class)
+
+```
+
+We appear to be predicting the probability of the Positive class. If we have a binary factor variable, `glm` will predict the probability of the second level of the factor. Note that this behavior is *not* consistent across R packages, and you always want to check before using a new classification package on real data.
+
+Here we could guess that we were predicting the probability of the Positive class because the signs of our coefficients were exactly the same as what we set in the true model.
+
+```{r}
+#| label: fix factor
+
+simdata$class2 <- factor(simdata$class) |>
+  relevel(ref = "Positive")
+
+contrasts(simdata$class2)
+
+logr_model2 <- glm(
+  class2 ~ x,
+  data = simdata,
+  family = "binomial"
+)
+
+summary(logr_model2)
+
+```
+
+### Check Your Knowledge
+
+1. How should we interpret the intercept in this model? How should we interpret the slope? (logr_model1)
+When x = 0, the log odds of being in the Positive class is -1.778
+When x = 0, the log odds of being in the Positive class is exp(-1.778) = .169
+When x = 0, the log odds of being in the Positive class is (.169/1+.169) = .144
+
+2. Interpreting in terms of "log-odds" is a mess for non-statisticians. We can instead talk about "odds," which people have marginally better understanding of. How can we transform our interpretations to talk about odds instead?
+
+```{r}
+#| label: transform coefficients to talk about odds
+
+exp(coef(logr_model1))
+
+```
+We now have odds of Positive associated with x = 0, and the multiplicative increase in odds associated with a 1-unit increase in x.
+
+3. Why can we go one step further and talk about probability when interpreting the intercept, but not the slope?
+
+## Plotting the Logistic Function
+
+What does the actual function look like?
+
+```{r}
+#| label: plot the logistic function
+
+xnew <- seq(min(x), max(x), by = .01)
+odds_pos <- exp(coef(logr_model1)[1] + coef(logr_model1)[2] * xnew)
+
+p_pos <- odds_pos/(1 + odds_pos)
+
+plot(xnew, p_pos, type = "l")
+
+```
+
+## Making Predictions with Logistic Regression
+
+```{r}
+#| label: make new predictions
+
+newx <- data.frame(
+  x = c(3, 5, 10)
+)
+
+predict(
+  logr_model1,
+  newdata = newx
+)
+
+# predicting on l
+
+```
+
+What are these predictions?
+
+To make predictions, we first need to convert these numbers to probabilities using the `type = "response"` argument:
+
+```{r}
+#| label: predict actual probabilities
+
+logr_prob_predictions <- predict(
+  logr_model1,
+  newdata = newx,
+  type = "response"
+)
+
+# predicting on probability scale
+
+logr_prob_predictions
+
+```
+
+To predict which class each observation belongs to, we now convert these probabilities to class predictions based on some threshold. If the probability is above this threshold, we choose the class that corresponds to a "1" in the model, and if below, we choose the class that corresponds to a "0".
+
+Typically, we set the threshold at 0.5 (both for intuitive reasons and because this produces the "Bayes decision boundary", which minimizes the Bayes error rate).
+
+```{r}
+#| label: classification with Bayes decision boundary
+
+logr_class_predictions <- ifelse(
+  logr_prob_predictions > .5, # We CAN change this threshold but often are advised against doing it
+  "Positive",
+  "Negative"
+)
+# first one is Negative because p ~ .4, others are Positive
+
+```
+
+## Multinomial Logistic Regression
+
+The multinomial distribution is the generalization of the binomial distribution to more than two categories. In a similar way, we can generalize logistic regression to "multinomial" logistic regression when our response variable has more than two categories.
+
+The two main functions I use to do this are `VGAM::vglm` and `nnet::multinom`. I find that `vglm` is more generalizable, but it doesn't play nice with `tidymodels`, so we'll use `multinom` instead today.
+
+### Simulating Multiple Categories
+
+```{r}
+#| label: simulating multiple classes
+
+set.seed(123)
+x <- rnorm(500, mean = 5, sd = 3) # simulate from normal
+
+# 3 classes
+# betas for log-odds of being in class 1 vs 3
+beta0_class1 <- -.6
+beta1_class1 <- .7
+# betas for log-odds of being in class 1 vs 3
+beta0_class2 <- -2
+beta1_class2 <- .5
+
+log_odds <- data.frame(
+  class1 = beta0_class1 + beta1_class1 * x,
+  class2 = beta0_class2 + beta1_class2 * x,
+  class3 = rep(0, length(x))
+)
+# log odds of being in each class relative to class 3
+
+head(log_odds)
+
+```
+
+```{r}
+#| label: fit multinomial model
+
+softmax <- function(x){
+  # x: a vector of numbers
+  return(exp(x)/sum(exp(x)))
+}
+
+probs <- apply(
+  log_odds, # matrix or data frame I want to apply a fn over
+  1, # apply on each row of the matrix or df
+  softmax # function to apply
+)
+
+probs[, 1:5] # each column convers that original row to probs
+
+```
+
+```{r}
+#| label: simulate classes
+
+set.seed(137)
+classes <- apply(
+  probs, # matrix to apply a fn over 
+  2, # apply over the columns instead of row
+  function(x){
+    sample(c("Class1", "Class2", "Class3"), size = 1, prob = x)
+  }
+)
+
+table(classes)
+
+```
+
+### Fitting the Multinomial Model
+
+The `nnet` package comes with most base R installations (you should have it already) and does basic neural networks.
+
+Notice that the `multinom` function does not throw a hissy fit about the class vector being a character vector and not a factor.
+
+```{r}
+#| label: fit multinomial model
+
+simdata <- data.frame(
+  x = x,
+  class = classes
+)
+
+library(nnet)
+
+multinom_model <- multinom(
+  class ~ x,
+  data = simdata
+)
+
+summary(multinom_model)
+
+```
+Estimating log-odds of being class 2 vs class 1
+[         insert           ] class 3 vs class 1
+
+log(P(class2)/P(class1)) = -1.65 - .182x
+log(P(class3)/P(class1)) = .877 - .852x
+log(P(class1)/P(class1)) = 0 (for obvious reasons)
+
+
+### Interpreting the Output
+
+The single most critical thing to understand to interpret this output is the reference level for the response variable.
+
+1. What is the reference level for `SubCategory`? 
+
+If we have $K$ groups, the Coefficients table then provides the information we need to make $K-1$ logistic regression equations of the form:
+
+$$
+log\left(\frac{P(\text{class})}{P(\text{reference class})}\right) = Intercept + Slope \times x
+$$
+
+2. Use the summary output to write the two logistic regression equations.
+
+If we change the reference level, then all of our equations change:
+
+```{r}
+#| label: change reference level and fit multinomial model
+
+simdata$class2 <- as.factor(simdata$class) |>
+  relevel(ref = "Class3")
+
+multinomial_model2 <- multinom(
+  class2 ~ x,
+  data = simdata
+)
+
+summary(multinomial_model2)
+
+```
+log(P(class2)/P(class3)) = -2.53 + .067x
+log(P(class1)/P(class3)) = -.877 - .852x
+
+3. What are the new logistic regression equations?
+
+### Predicting with Multinomial Logistic Regression
+
+If we just call `predict` as usual, the model will predict the probability of being in each class, but will only return the class for which the probability is greatest.
+
+```{r}
+#| label: predict categories
+
+multinom_pred <- predict(
+  multinom_model,
+  newdata = newx
+)
+
+multinom_pred
+
+```
+
+If we want to output the probabilities of being in each class, we need to include `type = "prob"`:
+
+```{r}
+#| label: predict probabilities
+
+multinom_pred_probs <- predict(
+  multinom_model,
+  newdata = newx,
+  type = "prob"
+)
+
+multinom_pred_probs
+
+```
+
+Briefly explain how these probabilities are calculated. Connect the ideas back to how we simulated the data.
+
+
+
+

@@ -1,0 +1,513 @@
+---
+title: "Activity: Linear and Logistic Regression with Tidymodels"
+subtitle: "Math 437"
+format: html
+editor: source
+---
+
+## A Note About Today
+
+We are not covering any new mathematics today. Instead, we are learning a different *tool* for making models and predictions.
+
+```{r}
+#| label: load packages
+library(tidymodels) # load everything we need
+# we're working with rsample, purrr, parsnip, recipes, broom, workflows, and yardstick today
+# all of these packages and more are loaded with this command
+
+library(splines2)
+```
+
+```{r}
+#| label: load data
+# change this so you can load the RateMyProfessor data
+RMP <- readr::read_csv(here::here("Data/RateMyProfessor.csv"))
+```
+
+
+## The tidymodels Philosophy
+
+When we're working with tidymodels, we worry much more about making good predictions than about the inferential properties of the model.
+
+Depending on which type of model you fit in R, the `predict` function can take different arguments and return different outputs. This can be incredibly confusing to a new user. The `tidymodels` philosophy is to provide a consistent interface into how models are fit, predictions are made, and predictive accuracy is evaluated. Essentially, it allows you to not remember the idiosyncrasies of each package separately.
+
+## Splitting into Training and Holdout Sets
+
+1. Why do we split our data into a *training set* and a *holdout set*? What is the purpose of each set?
+
+For now, we will concern ourselves with a single "simple random" split. We will randomly choose some proportion `prop` of the rows in the dataset, fit the model with those rows, and use the remaining rows to evaluate the predictive accuracy. 
+The function for a standard "simple random" split is `initial_split` from the `rsample` package within tidymodels:
+
+```{r}
+#| label: split with initial_split
+
+set.seed(214)
+RMP_split <- initial_split(RMP, prop = .75)
+# 75% in the training set, 25% in the holdout set (default)
+
+RMP_split
+
+```
+
+In this notation, the first number (Training) represents the number of rows in the training set, the second number (Testing) represents the number of rows in the holdout set, and the third number (Total) represents the total number of rows in the original dataset.
+
+Importantly, right now, we don't have the training and holdout sets.
+
+```{r}
+#| label: look at a split
+
+glimpse(RMP_split)   # glimpse is in dplyr, which is loaded w/ tinymodels
+
+```
+
+A split contains 4 objects: `data` (the original dataset), `in_id` (the row indices in the random sample), `out_id` (this is usually `NA`), and `id` (not so useful when we only do one training-holdout split, but could be useful if we are doing repeated splitting).
+
+To actually get the training and holdout sets out, we use the `training` and `testing` functions.
+
+```{r}
+#| label: split training and holdout
+
+RMP_train <- training(RMP_split) # gets training set
+RMP_holdout <- testing(RMP_split) # gets holdout
+# sometimes use analysis() and assessment()
+
+```
+
+## Linear Regression with Tidymodels
+
+### Fit the Model
+
+Generally, when we create a model with tidymodels, we create a `workflow` that primarily contains two things: the type of model we want to run, and a `recipe` that says how the variables in the training set should be transformed before running the model. 
+
+We start by defining the type of model we want to run, and setting up our workflow.
+
+```{r}
+#| label: workflow with a linear model
+
+linear_wflow <- workflow()     # set up workflow
+# This workflow will have a model and a recipe added to it
+# model: indicates what kind of model to use
+# recipe: indicates how to process data before putting it in the model
+
+linear_model <- linear_reg(
+  mode = "regression",
+  engine = "lm"
+)
+
+linear_wflow <- linear_wflow |>
+  add_model(linear_model) # add linear_model to workflow
+# only run this once
+# it will throw an error if you try to add a second model
+# if you need to overwrite the model, use update_model()
+
+```
+
+1. What does `linear_reg` indicate? What does `mode = "regression"` indicate? What does `engine = "lm"` indicate?
+
+We then add the recipe to the workflow.
+
+Technically, we don't need to make the `data` argument our training set, but this is generally a good idea to ensure that all of the variables in our formula are found in the training set.
+
+This recipe is extremely overcomplicated (i.e., in real models, don't do any of these steps without good reason), but it gives an idea of the `steps` we have already seen outside the `tidymodels` context:
+
+```{r}
+#| label: ridiculous recipe
+
+linear_recipe <- recipe(
+  overall ~ difficulty + interest + scientific_age + hotness + rank + mentions_accent + mentions_ta,     # must include plus signs, not * or :
+  data = RMP_train    # recommend data = data set
+) |>
+  step_normalize(all_numeric_predictors()) |> 
+  step_dummy(all_nominal_predictors()) |>
+  step_poly(scientific_age, degree = 2) |>
+  step_spline_natural(interest, deg_free = 6) |>
+  step_interact(terms = ~ starts_with("hotness"):difficulty)
+
+linear_recipe
+
+```
+
+1. What does `step_normalize` do? Why might we want to do this? What does `all_numeric_predictors()` indicate?
+step_normalize centers and scales predictor variables (converts to z-scores).
+all_numeric_predictors() means to select all numerical predictors in the recipe.
+
+2. What does `step_dummy` do? What does `all_nominal_predictors()` indicate?
+step_dummy makes dummy variables (indicator vars.).
+all_nominal predictors() selects all categorical predictors in the recipe.
+
+3. What does `step_poly` do?
+step_poly creates a polynomial regression, in this case it will get a quadratic function of degree 2 of scientific_age.
+
+4. What does `step_spline_natural` do?
+Gives us the spline natural with 6 degrees of freedom by calling the ns() func
+
+5. What does `step_interact` do? Why do we need `starts_with("hotness")`?
+step_interact creates interaction term. Because of step_dummy we don't have a variable named 'hotness' anymore. starts_with("hotness") will select 'hotness_hot' (since they are variables that start with 'hotness') and interact with them difficulty.
+
+```{r}
+#| label: add the recipe to the linear regression workflow
+
+linear_wflow <- linear_wflow |>
+  add_recipe(linear_recipe)
+#if you change the recipe, don't add_recipe again, update_recipe() instead
+
+```
+
+Note that if you screw this up, you will need to put in a new chunk replacing `add_recipe` with `update_recipe`. You can only ever add one model and one recipe.
+
+Once we have the workflow set up, we fit the model on the training set.
+
+```{r}
+#| label: actually fit the linear model
+
+linear_fit <- fit(
+  linear_wflow,      # first argument is workflow to fit
+  data = RMP_train    # fit on the training set
+)
+
+print(linear_fit)
+
+```
+
+### Predict the Response
+
+As usual, we use the `predict` function to make predictions. However, this time the object that we are predicting is a `workflow`, so the predictions will come out in a standardized way:
+
+```{r}
+#| label: predict with tidymodels - linear regression
+
+linear_predictions <- predict(
+  linear_fit,
+  new_data = RMP_holdout
+)
+
+head(linear_predictions)
+
+```
+
+1. What is the difference between the way these predictions are reported and the way they were reported using `predict` with the `lm` function?
+The difference with the output is that we got a tibble data frame here, with the 'lm' function the prediction is always different in formatting
+
+We can use the `augment` function (from `broom`) to add the predictions to the original data frame:
+
+```{r}
+#| label: augment linear regression
+# augment is in the broom package, loaded with tidymodels
+# use pipe instead of first argument
+
+linear_predictions_augment <- linear_fit |>
+  augment(
+    new_data = RMP_holdout
+  )
+
+head(linear_predictions_augment)
+
+```
+
+Typically, to measure the predictive accuracy of a regression model fit with `tidymodels`, we compute the root-mean-squared prediction error (RMSE), which is the square root of MSE. Minimizing RMSE minimizes MSE, but RMSE is a bit easier to interpret because it's in the units of our response variable. (Think of it like standard deviation vs. variance: variance is usually easier to work with mathematically, but standard deviation is usually more intuitive to interpret.)
+
+```{r}
+#| label: compute rmse
+# rmse is in the yardstick package, loaded with tidymodels
+
+rmse(
+  data = linear_predictions_augment,   # dataset that contains both y and y-hat values
+  truth = overall,     # column that contains the actual y-values
+  estimate = .pred     # column that contains the y-hat values
+)
+
+```
+
+1. How should we interpret this number?
+"on average", predictions are .666 stars (units) off from true overall ratings
+
+## Logistic Regression with Tidymodels
+
+Let's instead predict whether a professor will receive a chili pepper.
+
+### Fit the Model
+
+It is good practice to set up a new workflow every time you want to run a new model.
+
+```{r}
+#| label: logistic regression workflow
+
+logr_wflow <- workflow()     # blank workflow
+logr_model <- logistic_reg(
+  mode = "classification",
+  engine = "glm"    # use glm(function to fit model)   
+)
+
+```
+
+Again, we want to add our recipe including pre-processing steps.
+
+```{r}
+#| label: recipe for logistic regression
+
+logr_recipe <- recipe(
+  hotness ~ difficulty + review_count + interest + mentions_accent + scientific_age + gender + race + discipline + uni_type + uni_control, 
+  #formula
+  data = RMP_train
+) |>
+  step_poly(scientific_age, degree = 2) |>
+  step_dummy(all_nominal_predictors()) |>
+  step_log(review_count, base = 10)
+
+print(logr_recipe)
+
+logr_wflow <- logr_wflow |>
+  add_model(logr_model) |>
+  add_recipe(logr_recipe)
+
+```
+
+Now we can `fit` the model:
+
+```{r}
+#| label: fit the logistic regression model
+
+logr_fit <- logr_wflow |>
+  fit(data = RMP_train)
+
+print(logr_fit)
+
+```
+
+### Predict the Response
+
+As usual, we use the `predict` function to make predictions. Note that `tidymodels` assumes that, because you are fitting a classification model, you want class predictions.
+
+```{r}
+#| label: make class predictions
+
+logr_predict <- logr_fit |>
+  predict(new_data = RMP_holdout)
+
+head(logr_predict)
+
+```
+
+To get out the probabilities, use the argument `type = "prob"`:
+
+```{r}
+#| label: make probabilistic predictions
+
+logr_predict_probs <- logr_fit |>
+  predict(new_data = RMP_holdout,
+          type = "prob")
+
+head(logr_predict_probs)
+
+```
+
+1. What is the difference between the way these predictions are reported and the way they were reported using `predict` without `tidymodels`?
+
+We can also use `augment` to add the predictions to the original data frame:
+
+```{r}
+#| label: augment logistic regression
+
+logr_predictions_augment <- logr_fit |>
+  augment(new_data = RMP_holdout)
+
+head(logr_predictions_augment)
+
+```
+
+The accuracy of our predictions can be obtained using the `yardstick` package:
+
+```{r}
+#| label: accuracy with error
+#| error: true
+
+accuracy(
+  data = logr_predictions_augment,
+  truth = hotness,     # column with y-values
+  estimate = .pred_class # column with y-hat values
+)
+
+```
+
+1. What is this error, and why do we get it?
+hotness is not a factor, we need a factor not character
+
+```{r}
+#| label: fix to make a factor variable
+
+logr_predictions_augment$hotness <- as.factor(logr_predictions_augment$hotness)
+
+accuracy(
+  data = logr_predictions_augment,
+  truth = hotness,     # column with y-values
+  estimate = .pred_class # column with y-hat values
+)
+
+```
+
+Note that our estimates of model parameters, and our estimated accuracy, depend on which data points went into the training set and which went into the test set. If we set a different seed, we would likely get a different result. We will come back to this idea later.
+
+### Confusion Matrix
+
+The overall accuracy is usually not of interest. Instead, we want to know the distribution of errors. We can do this by using the `conf_mat` function:
+
+```{r}
+#| label: conf_mat for logistic regression
+
+conf_mat(
+  data = logr_predictions_augment,
+  truth = hotness, 
+  estimate = .pred_class
+)
+
+```
+
+1. How do we read this matrix?
+
+Define: POSITIVE class is the class that the algorithm is designed to detect
+        NEGATIVE class is the other class(es)
+        Actual +: obs is actually in + class
+        Actual -: obs is actually in - class
+        In conf_mat: dimension "Truth"
+        Predicted +: Algorithm predicts obs. in + class
+        Predicted -: Algorithm predicts obs. in - class
+        In conf_mat: dimension "Prediction"
+        l
+        4229 people predicted correctly (True Negatives - TN)
+        918 people predicted incorrectly (False Negatives - FN)
+        164 people predicted incorrectly (False Positives - FP)
+        199 people predicted correctly (True Positives - TP)
+
+## Multinomial Logistic Regression with `tidymodels`
+
+Now let's predict the rank of a professor as either Assistant Professor, Associate Professor, or full Professor.
+
+For multinomial logistic regression with the `nnet` package, we need to convert `rank` (our response variable) to a factor variable. We need to do this for both the training and holdout set.
+
+```{r}
+#| label: convert rank to factor
+
+RMP_train$rank <- factor(RMP_train$rank,
+                         labels = c("Assistant", "Associate", "Professor"))
+RMP_holdout$rank <- factor(RMP_holdout$rank,
+                         labels = c("Assistant", "Associate", "Professor"))
+```
+
+### Fit the Model
+
+The model type we want is called `multinom_reg`:
+
+```{r}
+#| label: fit multinomal regression
+
+multinom_wflow <- workflow()
+
+multinom_model <- multinom_reg(
+  mode = "classification",
+  engine = "nnet"
+)     # these are the defaults
+
+```
+
+Now we add our recipe:
+
+```{r}
+#| label: multinomial regression recipe
+# recipes was loaded with tidymodels earlier
+
+multinom_recipe <- recipe(
+  rank ~ scientific_age + gender + uni_control,
+  data = RMP_train # good practice to make data = training set
+) |>
+  step_dummy(all_nominal_predictors())
+
+```
+
+Now we `fit` the model we specified in our workflow:
+
+```{r}
+#| label: fit multinomial regression
+
+multinom_wflow <- multinom_wflow |>
+  add_model(multinom_model) |>
+  add_recipe(multinom_recipe)
+
+multinom_fit <- fit(multinom_wflow,
+                    data = RMP_train)
+
+```
+
+```{r}
+#| label: extract nnet fit
+
+multinom_fit |>
+  extract_fit_engine() # gets out original function output
+
+```
+
+
+### Predict the Response
+
+Just like with logistic regression, if we do not specify what we want out of `predict`, we will get the predicted classes.
+
+```{r}
+#| label: class predictions multinomial
+
+multinom_pred <- predict(
+  multinom_fit,
+  new_data = RMP_holdout
+)
+
+multinom_pred
+
+```
+
+If we include the argument `type = "prob"`, we can get out the predicted probability of being in each class instead.
+
+```{r}
+#| label: probability predictions multinomial
+
+multinom_pred_probs <- predict(
+  multinom_fit,
+  new_data = RMP_holdout,
+  type = "prob"
+)
+
+multinom_pred_probs
+
+```
+
+However, if we use `augment`, we can add both the class predictions and the probability predictions to the original data frame:
+
+```{r}
+#| label: use augment to add both for multinomial
+# broom was loaded with tidymodels earlier
+
+multinom_augment <- multinom_fit |>
+  augment(new_data = RMP_holdout)
+
+multinom_augment
+
+```
+
+```{r}
+#| label: accuracy for multinomial
+
+accuracy(multinom_augment,
+         truth = rank,
+         estimate = .pred_class
+)
+
+```
+
+```{r}
+#| label: conf_mat for multinomial
+
+multinom_augment |>
+  conf_mat(
+    truth = rank,
+    estimate = .pred_class
+)
+
+```
+

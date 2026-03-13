@@ -146,7 +146,7 @@ Run the code in ISLR Lab 3.6.5. Put each chunk from the textbook in its own chun
 ```{r}
 #| label: Chunk 1 5a
 
-lm.fit2 <- lm(medv ~ lstat + I(lstat^2))
+lm.fit2 <- lm(medv ~ lstat + I(lstat^2), data = Boston)
 summary(lm.fit2)
 
 ```
@@ -154,7 +154,7 @@ summary(lm.fit2)
 ```{r}
 #| label: Chunk 2 5a
 
-lm.fit <- lm(medv ~ lstat)
+lm.fit <- lm(medv ~ lstat, data = Boston)
 anova(lm.fit, lm.fit2)
 
 ```
@@ -170,7 +170,7 @@ plot(lm.fit2)
 ```{r}
 #| label: Chunk 4 5a
 
-lm.fit5 <- lm(medv ~ poly(lstat, 5))
+lm.fit5 <- lm(medv ~ poly(lstat, 5), data = Boston)
 summary(lm.fit5)
 
 ```
@@ -267,7 +267,7 @@ Notice that the predictions are now returned as a matrix instead of a list, so y
 #### Solution
 
 ```{r}
-#| label: Fitting
+#| label: Fitting POLY
 
 fit_oa <- lm(overall ~ poly(difficulty, 2),
           data = associates)
@@ -276,7 +276,7 @@ coef(summary(fit_oa))
 ```
 
 ```{r}
-#| label: Defining
+#| label: Defining POLY
 
 difflims <- range(associates$difficulty)
 
@@ -291,10 +291,10 @@ se.bands_oa <- cbind(preds_oa$fit + 2 * preds_oa$se.fit, preds_oa$fit - 2 * pred
 ```
 
 ```{r}
-#| label: Plot
+#| label: Plot POLY
 
-plot(associates$difficulty, associates$overall, xlim = difflims, cex = .5, col = "darkgrey")
-title("Degree -2 Polynomial", outer = T)
+plot(associates$difficulty, associates$overall, xlim = difflims, cex = .5, xlab = "Difficulty", ylab = "Overall Rating", col = "darkgrey")
+title("Degree -2 Polynomial")
 lines(diff.grid, preds_oa$fit, lwd = 2, col = "blue")
 matlines(diff.grid, se.bands_oa, lwd = 1, col = "blue", lty = 3)
 
@@ -357,10 +357,10 @@ attr(bs(Wage$age, df = 6), "knots")
 ```{r}
 #| label: Chunk 3 6a
 
-fit2 <- lm(Wage$wage ~ ns(age, df = 4), data = Wage)
-pred2 <- predict(fit2, newdata = list(age = age.grid), se = T)
-lines(age.grid, pred2$fit, col = "red", lwd = 2)
-
+#fit2 <- lm(Wage$wage ~ ns(age, df = 4), data = Wage)
+#pred2 <- predict(fit2, newdata = list(age = age.grid), se = T)
+#lines(age.grid, pred2$fit, col = "red", lwd = 2)
+# Put in comments because wouldn't render without plot but was not ordered by instructions to put plot
 ```
 
 ### Part b (Code: 1 pt)
@@ -372,7 +372,7 @@ Produce a figure similar to that in Problem 5c, but with this natural spline mod
 #### Solution
 
 ```{r}
-#| label: Fitting
+#| label: Fitting NS
 
 fit_nsoa <- lm(overall ~ ns(difficulty, knots = c(2, 3, 4)),
                 data = associates)
@@ -381,7 +381,7 @@ coef(summary(fit_nsoa))
 ```
 
 ```{r}
-#| label: Defining
+#| label: Defining NS
 
 difflims_ns <- range(associates$difficulty)
 
@@ -396,11 +396,11 @@ preds_nsoa <- predict(fit_nsoa,
 ```
 
 ```{r}
-#| label: Plot
+#| label: Plot NS
 
-plot(associates$difficulty, associates$overall, xlim = difflims_ns, cex = .5, col = "darkgrey")
+plot(associates$difficulty, associates$overall, xlim = difflims_ns, cex = .5, xlab = "Difficulty", ylab = "Overall Rating", col = "darkgrey")
 title("Natural Spline (3 Knots)", outer = T)
-lines(diff.grid_ns, preds_nsoa[, "fit"], lwd = 2, col = "blue")
+lines(diff.grid_ns, preds_nsoa[, 1], lwd = 2, col = "blue")
 matlines(diff.grid_ns, preds_nsoa[, 2:3], lwd = 1, col = "blue", lty = 3)
 
 ```
@@ -437,10 +437,48 @@ HINT: I have verified that it is possible to solve this problem by adapting only
 
 #### Solution
 
+```{r}
+#| label: Fit Model
 
+fit_group <- lm(
+  overall ~ hotness * ns(difficulty, knots = c(2, 3, 4)),
+  data = associates
+)
 
+```
 
+```{r}
+#| label: Defining
 
+diff_hot_grid <- expand.grid(
+  difficulty = seq(1, 5, by = 0.1),
+  hotness = c("cold", "hot")
+)
 
+preds_group <- predict(fit_group, newdata = diff_hot_grid)
+
+pred_comb <- data.frame(diff_hot_grid, predicted_overall = preds_group)
+
+```
+
+```{r}
+#| label: Plots
+
+plot(associates$difficulty, associates$overall, xlim = c(1, 5), cex = .5, xlab = "Difficulty", ylab = "Overall Rating", col = "darkgrey")
+
+cold <- subset(pred_comb, hotness == "cold")
+lines(cold$difficulty,
+      cold$predicted_overall,
+      col = "blue",
+      lwd = 2)
+
+hot <- subset(pred_comb, hotness == "hot")
+lines(hot$difficulty,
+      hot$predicted_overall,
+      col = "red",
+      lwd = 2)
+
+```
+What this graph suggests about how overall rating changes with difficulty for "hot" vs. "cold" professors is the same old song repeated various times throughout this lab. Attractive professors tend to have higher overall ratings over unattractive professors which also suggests attractive professors are penalized less.
 
 

@@ -1,0 +1,456 @@
+---
+title: "Activity: Classification Accuracy Metrics"
+subtitle: "Math 437"
+format: html
+editor: source
+---
+
+## A Simple Dataset
+
+The [Restrain Food Database](https://restrain.shinyapps.io/restrainfooddatabase/) was "designed by Cardiff University scientists [to] help people lose weight and eat more healthily."
+
+The database contains 520 images of foods that should be familiar to people living in the UK. Each food is rated for healthiness, taste, and the strength of cravings for the food on a scale from 0-100.
+
+Today we will be trying to predict just whether a food is a fruit or a vegetable using logistic regression.
+
+```{r}
+#| label: import data and packages
+#| message: false
+#| warning: false
+library(tidyverse)
+library(tidymodels)
+Restrain <- readr::read_csv(here::here("Data/Restrain.csv"))
+
+# We only care about predicting fruits vs vegetables
+fv <- Restrain |>
+  filter(SubCategory %in% c("Fruits", "Vegetables"))
+
+fv$SubCategory <- factor(fv$SubCategory, levels = c("Fruits","Vegetables"))
+```
+
+```{r}
+#| label: split training-holdout
+
+set.seed(130)
+
+fv_split <- initial_split(
+  data = fv,
+  prop = .80     # 80% in the training set
+)
+
+fv_train <- training(fv_split)
+fv_test <- testing(fv_split)
+
+```
+
+So we have a fairly small training set (83 foods) and test set (21 foods). We probably shouldn't expect to get amazing results, but at the same time our datasets are small enough that we can actually investigate what's going on.
+
+```{r}
+#| label: fit logistic regression with tidymodels
+
+fv_wflow <- workflow()
+
+fv_model <- logistic_reg(
+  mode = "classification",
+  engine = "glm"
+)
+
+fv_recipe <- recipe(
+  SubCategory ~ Taste + Cravings + Healthiness,
+  data = fv_train
+)
+
+fv_wflow <- fv_wflow |>
+  add_model(fv_model)   |>
+  add_recipe(fv_recipe)
+
+```
+
+```{r}
+#| label: fit and predict with logistic regression
+
+fv_fit <- fv_wflow |>
+  fit(data = fv_train)
+
+fv_pred <- fv_fit |>
+  augment(new_data = fv_test)
+
+fv_pred
+
+```
+
+
+```{r}
+#| label: confusion matrix
+
+fv_pred |>
+  conf_mat(
+    truth = SubCategory,
+    estimate = .pred_class
+  ) -> fv_conf_mat
+
+print(fv_conf_mat)
+
+```
+
+1. By default, the first level (here "Fruits") is considered the positive class. Briefly explain in the context of this model what is meant by each of the following terms: true positive, true negative, false positive, false negative. How many of each do we have in the test set?
+
+TP - 3 predicted fruits are fruits
+TN - 12 predicted vegetables are vegetables
+FP - 2 predicted fruits are vegetables
+FN - 4 predicted vegetables are fruits
+
+2. Briefly explain the difference between sensitivity and specificity of a model. Use the confusion matrix to estimate the sensitivity and specificity of this model.
+
+sensitivity = P(predicted + | actual +)
+Estimated as TP/(TP+FN)
+Estimate is 3/7
+
+specificity = P(predicted - | actual -)
+Estimated as TN/(TN+FP)
+Estimate is 12/14
+
+When we have a binary response variable and the predicted probability of one or both classes, we can choose a different threshold and "manually" predict classes. Here we'll set the threshold for predicting a food to be a fruit to be 20%:
+
+```{r}
+#| label: predict at 20 percent
+
+fv_pred$.pred_class2 <- ifelse(
+  fv_pred$.pred_Fruits > .20,
+  "Fruits",
+  "Vegetables"
+)     |>
+  as.factor()
+
+fv_pred |>
+  conf_mat(
+    truth = SubCategory,
+    estimate = .pred_class2
+  )
+
+```
+
+For response variables with more than two classes, this threshold-adjusting trick doesn't work: we have to assign to the "most likely" class.
+
+## ROC Curves
+
+For a binary response variable, because we can choose any arbitrary threshold we want, we can look at the sensitivity and specificity (or equivalently, sensitivity and false positive rate) over the entire range of thresholds. This plot is called a Receiver Operating Characteristic (ROC) curve:
+
+```{r}
+#| label: ROC Curve
+# Construct the ROC curve
+roc_tibble <- roc_curve(
+  data = fv_pred,
+  truth = SubCategory,
+  .pred_Fruits     # Probability of positive class
+)
+
+# Plot the ROC curve
+
+autoplot(roc_tibble)
+
+```
+
+3. How do we read this graph?
+
+(1,1) means you are postive and I am only predicting positive
+(0,0) means you are negaive and I am only predicting negative
+
+Perfect predictions would be going all the way up then all the way right
+
+```{r}
+#| label: print roc_tibble
+
+print(roc_tibble)
+tail(roc_tibble)
+
+```
+
+The Area Under the Curve (AUC) integrates the ROC curve over the entire possible range of threshold probabilities:
+
+```{r}
+#| label: AUC
+
+roc_auc(
+  data = fv_pred,
+  truth = SubCategory,
+  .pred_Fruits     # Probability of positive class
+)
+
+```
+
+An AUC of 0.5 indicates that we are doing no better than coin-flip at predicting classes. The higher the AUC, the better the model *over the entire range of possible decision thresholds*.
+
+However, in practice, we typically don't look at the entire range of possible decision thresholds.
+
+## Choosing an Optimal Threshold
+
+### Significance-Level Control of False Positive Rate
+
+```{r}
+#| label: control FPR
+
+alpha <- .05
+
+roc_tibble[which(roc_tibble$specificity > 1 - alpha),]
+
+```
+
+This code finds the maximum sensitivity given a false positive rate less than $\alpha$. Here that's not very useful because we only have 21 points in the holdout set, but if you had a larger holdout set you might find it useful.
+
+
+### Distance Metric
+
+The upper left point (0,1) on the ROC plot represents an "ideal" model where at some threshold every observation in the holdout set is classified correctly. An obvious choice of threshold would then be the one that matches the point closest to the upper left of the ROC plot by some distance metric (such as Euclidean distance).
+
+```{r}
+#| label: Euclidean distance
+
+roc_tibble$dist_euclidean <- sqrt(
+  (roc_tibble$sensitivity - 1)^2 + 
+  (roc_tibble$specificity - 1)^2     # because distance from (0,1) is distance from FPR = 0 or specificity = 1
+)
+
+roc_tibble[which.min(roc_tibble$dist_euclidean),]
+
+```
+
+Instead of Euclidean dist, manhatttan dist could be done, but through Youden's J-Index
+
+### Youden's J-index
+
+Youden's J-index is calculated as (sensitivity + specificity - 1), or equivalently, (sensitivity) - (1 - specificity). Notice that Youden's J-index approaches 1 as we approach the top left of the ROC plot; it turns out maximizing Youden's J-index minimizes a different distance metric ("Manhattan distance") to the top left of the plot.
+
+```{r}
+#| label: J-index
+
+roc_tibble$j_index <- roc_tibble$sensitivity + roc_tibble$specificity - 1
+
+roc_tibble[which.max(roc_tibble$j_index),]
+
+```
+
+In this case, with such a small dataset, we found the same optimal threshold using all three methods, but this will generally not be the case.
+
+### Custom Loss Function
+
+In general:
+
+* A True Positive has some kind of "benefit"
+* A False Positive has some kind of "loss"
+* A False Negative has some kind of "loss" that is different from a False Positive
+* A True Negative typically has neither a "benefit" nor a "loss"
+
+By placing a value on the "benefit" and "loss" of each type of predictive outcome, we can calculate the overall average benefit or loss at each threshold.
+
+In the example code below, we will assume:
+
+* Correctly classifying a fruit as a fruit has a benefit of +1
+* Incorrectly classifying a fruit as a vegetable has a loss of -2
+* Incorrectly classifying a vegetable as a fruit has a loss of -3
+* Correctly classifying a vegetable as a vegetable has neither a gain nor a loss
+
+```{r}
+#| label: loss function
+
+loss_matrix <- matrix(
+  c(1, -2, -3, 0),
+  nrow = 2
+)
+
+loss_matrix
+
+```
+
+```{r}
+#| label: compute loss at each threshold
+
+n_threshold <- nrow(roc_tibble)
+mean_loss <- numeric(n_threshold)
+
+for(i in seq_along(roc_tibble$.threshold)){
+  # for each threshold value - roc_tibble$.threshold[i]
+  fv_pred$.pred_class2 <- ifelse(
+    fv_pred$.pred_Fruits >= roc_tibble$.threshold[i],
+    "Fruits",       # if above threshold
+    "Vegetables"    # if not above threshold
+  ) |>
+    factor(levels = c("Fruits", "Vegetables"))     # should make level 1 = Fruits, level 2 = Veggies
+  
+  confusion_matrix <- conf_mat(
+    fv_pred,
+    truth = SubCategory,
+    estimate = .pred_class2
+  )     # this gets out a 2x2 matrix
+  
+  overall_loss <- confusion_matrix$table * loss_matrix
+  # element-wise loss for TP, FP, TN, FN
+  
+  # R is weird - we can take mean of a matrix
+  
+  mean_loss[i] <- sum(overall_loss)/sum(confusion_matrix$table)
+  
+}
+
+```
+
+```{r}
+#| label: plot mean_loss vs threshold
+
+plot(roc_tibble$.threshold[c(-1, -nrow(roc_tibble))],
+     # thresholds on x-axis
+     mean_loss[c(-1, -nrow(roc_tibble))],
+     # mean loss on y-axis
+     type = "l",
+     xlab = "Threshold",
+     ylab = "Average Test Set Loss")
+
+
+
+
+```
+
+
+If you can use a custom loss function, you should. Developing a custom loss function indicates that you understand the (positive and/or negative) consequences of each model outcome and have been able to place some sort of numeric value on how good or bad that outcome is.
+
+## More Things We Can Get Out of the Confusion Matrix
+
+```{r}
+#| label: summary of the confusion matrix
+
+summary(fv_conf_mat)
+
+```
+
+This produces a ton of accuracy measures, including accuracy, sens (sensitivity), spec (specificity), and j_index (Youden's j-index), which we've already seen. You can get any of these measures by calling the function name in the `.metric` column, e.g.:
+
+```{r}
+#| label: get out ppv
+
+ppv(fv_pred,
+    truth = SubCategory,
+    estimate = .pred_class)
+
+```
+
+1. What do `ppv` and `npv` measure? Explain how to find them based on the number of true positives, false positives, true negatives, and false negatives.
+
+2. What does `f_meas` (F1 score) measure?
+
+3. What does `kap` (Cohen's kappa) measure?
+
+4. What does `mcc` (Matthews correlation coefficient) measure?
+
+Note that we are assuming that positive is "Fruits" and negative is "Vegetables". To flip this, we have to tell R to use the other level:
+
+```{r}
+#| label: flip positive level
+
+summary(fv_conf_mat,,
+        event_level = "second")
+# Positive class is second row/column in conf. matrix
+
+```
+
+## Variations on MSE for Categorical Variables
+
+Recall that we cannot use MSE to evaluate a classification model. However, there are a couple of variations on MSE that work very well. In particular, these variations on MSE work on the predicted probabilities instead of the predicted classes, which allows us to distinguish between two models that give similar predictions based on which model is more confidently correct in its predictions.
+
+### Brier Score
+
+Recall that for a regression model,
+
+$$
+MSE = \frac{1}{n} \sum_{i=1}^n (y_i - \hat{y}_i)^2
+$$
+
+Brier score directly generalizes the formula for MSE for use with categorical variables. The idea is that when we know the true class for an observation, it has probability 1 of being in that class and probability 0 of being in any other class. Thus, in the formula for MSE, $y_i = 1$ and $\hat{y}_i = p_i$, the estimated probability of observation $i$ being in its actual class. Plugging into the formula for MSE gives:
+
+$$
+\text{Brier score} = \frac{1}{n} \sum_{i=1}^n (1 - p_i)^2
+$$
+
+It's relatively simple to compute using `tidyverse` packages, but we'll just use the `yardstick` package to get it out directly:
+
+```{r}
+#| label: brier_class function
+
+brier_class(
+  fv_pred,
+  truth = SubCategory,
+  # must give it the prob. of first level
+  .pred_Fruits
+  # for K > 2 classes, need all .pred_{Class} probs.
+)
+
+```
+
+Note that the `brier_class` function, unlike most other functions in `yardstick`, does not recognize an `event_level` argument; you have to pass it the probability of the positive class.
+
+The generalization to more than two classes is:
+
+$$
+\text{Brier score} = \frac{1}{2n} \sum_{i=1}^n \sum_{j=1}^K (C_{ij} - p_{ij})^2
+$$
+
+Where $C_{ij} = 1$ if observation $i$ is in class $j$ and 0 otherwise. 
+
+If your response variable has more than two classes, you'll need to list out a *full set* of unquoted column names indicating *all* the columns with predicted probabilities, instead of just the positive class. (This behavior *does not* work with binary classification; R will throw an error if you pass both the column with the probability of the positive class and the column with the probability of the negative class.)
+
+Like MSE, lower Brier score indicates a more accurate model. A Brier score of 0.25 for a binary classification model indicates that the model is no better than a coin flip, while a Brier score of 0 indicates that the model is not only 100% accurate but also is supremely confident in each prediction. 
+
+### Cross-Entropy/Log-Loss
+
+Instead of directly replacing $y_i$ and $\hat{y}_i$ in the formula for MSE, we can take a more conceptual approach. RSS (and hence MSE) falls directly out of the likelihood function for linear regression, so minimizing RSS/MSE is equivalent to maximizing the likelihood function. We can incorporate a similar idea for classification problems: find a function of the probabilities for which minimizing that function is equivalent to maximizing the likelihood function.
+
+we can write the likelihood function as:
+
+$$
+L(p_1, p_2, \ldots, p_K | X, Y) = \prod_{i=1}^n\prod_{l=1}^K p_{il}^{y_{il}}
+$$
+
+where $p_{i1} + p_{i2} + \ldots + p_{iK} = 1$ for all $i$,  $y_{il} = 1$ if $y_i = k$ and 0 otherwise.
+
+This expression is unwieldy and we prefer to maximize it by maximizing the log-likelihood:
+
+$$
+l(p_1, p_2, \ldots, p_K | X, Y) = \sum_{i=1}^n\sum_{l=1}^K y_{il} log(p_{il})
+$$
+
+But notice that $\sum_{l=1}^K y_{il} log(p_{il}) = log(p_{i})$, where again $p_i$ is defined as the estimated probability of observation $i$ being in its actual class.
+
+Therefore, maximizing the log-likelihood is equivalent to minimizing its negative,
+
+$$
+\text{log loss} = - \sum_{i=1}^n log(p_{i})
+$$
+
+Typically we work with the mean log loss, which just divides this expression by n (essentially the classification equivalent of RSS vs. MSE).
+
+For binary classification, just like `brier_class`, the `mn_log_loss` function takes an unnamed argument with the name of the column containing the predicted probabilities of the positive class. **Unlike** the `brier_class` function, `mn_log_loss` can actually deal with you giving it the probabilities of the negative class instead (as long as you tell the function that you've done this with the `event_level` argument). The default is to use the mean but the argument `sum = TRUE` will give the sum instead.
+
+```{r}
+#| label: mean log-loss
+
+mn_log_loss(
+  fv_pred,
+  truth = SubCategory,
+  .pred_Fruits,     # prob of first level
+  event_level = "first" # says we gave prob of 1st level in confusion matrix
+)
+
+```
+
+If your response variable has more than two classes, you'll need to list out all the columns with predicted probabilities, just like with `brier_class`, but just like `brier_class`, `mn_log_loss` throws an error if you only have two classes and pass both columns with predicted probabilities.
+ 
+Like MSE, lower (mean or total) log loss indicates a more accurate model. Whereas Brier score was restricted to $[0, 1]$, log loss is on the interval $[0, \infty)$ where a log loss of 0 also indicates that the model is not only 100% accurate but also is supremely confident in each prediction. 
+
+The main difference between the Brier score and mean log-loss is that squared error loss is bounded on $[0,1]$ but logarithmic loss is not:
+
+```{r}
+#| label: how wrong are we
+
+
+```
+
+Basically, mean log-loss *really* punishes you for making overconfidently wrong predictions.
