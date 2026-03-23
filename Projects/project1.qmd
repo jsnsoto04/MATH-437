@@ -1,0 +1,327 @@
+---
+title: "Project 1"
+author: "Jason Soto"
+format: pdf
+editor: source
+---
+
+## Packages and Data
+
+```{r}
+#| label: load packages and data
+#| message: false
+#| warning: false
+here::i_am("Projects/project1.qmd")
+library(ISLR2)
+library(ggplot2)
+library(dplyr)
+library(tidymodels)
+library(glmnet)
+library(selectiveInference)
+library(nnet)
+library(boot)
+library(coin)
+
+data1 <- readr::read_csv(here::here("Data/data1.csv"))
+data2 <- readr::read_csv(here::here("Data/data2.csv"))
+data3 <- readr::read_csv(here::here("Data/data3.csv"))
+data4 <- readr::read_csv(here::here("Data/data4.csv"))
+
+```
+
+## Section 1: Linear Modeling
+
+The data1 file contains the frequency of an immune cell known as a basophil (as a percentage of mononuclear cells in the blood sample) for 144 women. Blood samples were taken from women at least 2 years after their most recent delivery. Some of these women (“Case”) experienced hypertensive disorders and others (“Control”) did not. Your goal is to determine whether there is a significant difference in basophil frequency later in life between these two groups of women. We will start by fitting a linear model to predict basophil frequency from the Group.
+
+## Part a
+
+Fit the linear model and obtain the coefficients.
+
+```{r}
+#| label: x
+
+# Fit linear model
+blm <- lm(Basophil_frequency ~ Group, data = data1)
+
+# Show coefficients
+summary(blm)
+
+```
+
+
+## Part b
+
+Interpret the slope and intercept of the linear model.
+
+Based on our fitted model,
+Basophil_frequency = 1.514 + .354(Group == "Control")
+
+So, based on same model, our mean for Basophil_frequency is predicted to be at 1.514 if our subject is in the Case Group. This is also our intercept. However, there can be an increase of .354 units if we consider the subject to be in the Control Group.
+
+## Part c
+
+Argue that at least one assumption for inference with the linear model is not met, and support your argument with at least one graph.
+
+Our first plot, residuals vs plots, residuals have a very clearly unequal spread across our fitted values. This suggest that variance may not be a constant.
+Next, the normality assumption is not met. Below, the Q-Q plot shows us that the residuals deviate from the straight line at the tails. This tells us that they are not normally distributed.
+
+```{r}
+#| label: Plot
+
+plot(blm, which = 1)
+plot(blm, which = 2)
+
+```
+
+
+## Section 2a: Mann-Whitney U Tests
+
+Since a linear model does not seem appropriate, a nonparametric test (such as Mann-Whitney U test) is likely better for determining whether there is a significant difference in basophil frequency between the two groups. Perform an appropriate Mann-Whitney U test with the data in the data1 file
+
+## Part a **************************************************************************
+
+Write the null hypothesis for the test in the context of this problem.
+
+H0: The distribution of basophil frequency is the same for women in the Case group and the Control group.
+
+## Part b
+
+Explain the general concepts/procedure behind permutation-based tests such as the Mann-Whitney test. Attempt as best you can to write your explanation in language that someone without much statistical knowledge can understand.
+
+  To start, the purpose of permutation-based tests is to find if some specific statistical difference between two groups is caused by chance or by reason. An example could be finding out why there may be a difference in reaction time between men and women. We will find this through sample data, which is basically data we find or are given, with intent to represent a larger population without bias.
+    So, we must define a null hypothesis and an alternative hypothesis, hypothesis being a statement that we want to test about the data. Under a Mann-Whitney Test, our null hypothesis is that there is no difference between the medians of the populations, or, that their probabilistic distributions are equal. The alternative is the opposite, that there is a difference.
+    So all the data we have, each individual data point we call an observation, which we shall rank in order by value. Then, we take each observation, shuffle the group labels (Control and Case) and save them all together as a set, called a dataset. Swapping labels is to see if the label matters or not. We repeat that process of shuffling and creating datasets many times, could be thousands of times.
+    Here I'll make the distinction that simulated data is the data we reshuffled over and over, and the observed data is the data we started with. With all that we can construct the null distribution which tells us what kind of difference we can expect if it were by luck, which gives us a sort of kind of range of grace. The null distribution gives us a p-value. This tells us if we reject our null hypothesis, or that we don't have enough information to reject it, in which we decide the next step. A p-value usually has to be less than 5%, but it may vary depending on what is needed.
+
+## Part c
+
+Perform the Mann-Whitney test and write a conclusion in the context of the problem.
+
+```{r}
+#| label: mann-whitney test
+
+data1$Group <- factor(data1$Group)
+
+mw_test <- wilcox_test(
+  Basophil_frequency ~ Group,
+  data = data1,
+  alternative = "two.sided",   # Checks for any side being greater than the other, rather than one side being greater/less
+  distribution = "approximate"
+)
+
+pvalue(mw_test)
+
+```
+The Mann-Whitney U test gives us a p-value of .0163, which less than .05. This shows a statistically significant difference in basophil frequency between the Case and Control groups. Thus, we reject the null, hence, the distributions of basophil frequency are not the same for the two groups.
+
+### Section 2b: Adjusting p-values
+
+The authors actually performed Mann-Whitney U tests on all 2,191 immune response markers that they measured from the women’s blood samples. The data2 file contains the p-values from these Mann-Whitney tests. Determine which (if any) immune markers show a significant difference between the Case and Control groups.
+
+(Note to self, they performed it on all the other stuff along with Basophil_frequency, which is an immune response marker
+
+## Part a
+
+Do something sensible with the p-values to correct for having done over 2000 tests.
+(Note to self, if p-value < 5, then 5% would look significant but just be luck, we need to reduce false positives, reduce type 1 errors, reduce fdr, for many p-values)
+
+```{r}
+#| label: P-Value Adjust
+
+# For comparison later
+sum(data2$pvalue < .05)
+
+# Adjust p-values using BH (The most realistic one)
+q.values.BH <- p.adjust(data2$pvalue, method = "BH")
+
+# Count significant markers at 0.05 level
+sum(q.values.BH < 0.05)
+
+# View which markers are significant (Unnecessary as there are none, but necessary if there was, but there is none in this)
+
+# data2$adj_p <- q.values.BH
+# significant_markers <- data2[data2$adj_p < 0.05, ]
+
+# significant_markers
+
+```
+
+## Part b
+
+Explain (in the text) what you did, why you did it, and generally how the method works. Attempt as best you can to write your explanation in language that someone without much statistical knowledge can understand.
+
+So back to the p-value. When it is below 5%, we declare that the test is statistically significant, which means that the observation did not happen by pure luck. Data2 provided p-values for other immune response markers for the Control and Case group. There are supposedly 99 significant tests. Though, it is likely that there are many false positives, which I can explain this as testing positive for a baby but not really being pregnant. To reduce false positives we want to control that by adjusting the p-values using methods discovered by masters of data. Once we keep this False Discovery Rate under control, we found that there are truly no significant markers in Data2.
+
+## Section 3: Bootstrap Confidence Interval
+
+Using a bootstrap procedure and the data1 file, obtain a 95% confidence interval for the difference in population median basophil frequency between Cases and Controls.
+You do not need to interpret the confidence interval.
+
+## Part a
+
+Obtain a 95% bootstrap confidence interval using any bootstrap procedure discussed in lecture/lab.
+
+```{r}
+#| label: Bootstrap CI
+
+# Step 1: define the function
+
+boot_sample_median <- function(df, ind){
+  # df = data frame containing the original data to sample from
+  # ind = vector of row indices corresponding to the bootstrap sample
+  
+  # Step 1: the bootstrap sample is inherent when we subset df based on ind
+  boot_df <- df[ind, , drop = FALSE]
+  
+  # Step 2: calculate the statistic
+  med_case <- median(boot_df$Basophil_frequency[boot_df$Group == "Case"], drop = FALSE)
+  med_control <- median(boot_df$Basophil_frequency[boot_df$Group == "Control"], drop = FALSE)
+  boot_median <- med_control - med_case
+  
+  
+  return(boot_median) # explicitly what is the output
+  
+}
+
+# Step 2: create bootstrap samples
+B <- 1000
+
+boot_sampling_dist <- boot(
+  data = data1,
+  statistic = boot_sample_median,
+  R = B,
+  strata = as.factor(data1$Group)
+)
+
+# Step 3: with boot.ci
+
+boot.ci(
+  boot_sampling_dist, # the thing we got out of the boot fn
+  conf = .95,         # conf int
+  type = c("perc", # percentile
+           "bca"   # BCa CI
+           )
+)
+
+```
+
+## Part b
+
+Explain the general concepts/procedure behind bootstrap resampling and how it is implemented in your code. Attempt as best you can to write your explanation in language that someone without much statistical knowledge can understand.
+
+  To start, bootstrap resampling is a method used to understand how much a statistic (like a median) might vary. We use the given data and act as if it represents the population.
+  Next, we want to repeatedly create new datasets from the original one by sampling with replacement. Basically, we create a new dataset with the original observations randomly, meaning any observation can be used multiple times or not at all. Each of these datasets is called a bootstrap sample and are equal size as the original dataset. The bootstrap samples act as replacements for real samples.
+  For each bootstrap sample, we calculate the statistic we care about. In this case, we calculate the difference in median Basophil_frequency between the Control and Case groups. We repeat this process many times, 1000 times here, which gives us a collection of these values. This collection is called a bootstrap distribution which shows us how the statistic varies due to random sampling.
+  With this distribution, we can then find a confidence interval. A 95% confidence interval is consists of the middle 95% of the values from this distribution. So we are 95% confident that the true difference in medians may exist in here. 
+  In the code itself, we first defining a function that calculates the difference in medians between the two groups. Next, we use the boot function to repeatedly resample the data and apply this function each time. We also make sure that each bootstrap sample keeps the same group structure. Finally, we use the boot.ci function to compute the confidence interval using methods like the percentile and BCa approaches.
+
+## Section 4: Logistic Regression with Variable Selection
+
+The data3 file contains the levels of 280 immune markers collected on a sample of 66 women who were at least 28 weeks pregnant but had not yet delivered. Using these markers, fit a logistic regression model to predict if the mother is experiencing a hypertensive disorder (Case) or not (Control). Perform variable selection to eliminate irrelevant variables.
+
+For this problem, you do not need to split into a training and holdout set! Use the
+entire dataset as a training set and perform cross-validation instead!
+
+## Part a
+
+Create a logistic regression model that classifies a mother as a Case or Control based on all immune response variables.
+
+```{r}
+#| label: x
+
+group_model <- glm(
+  Group ~ .,
+  data = data3,
+  family = "binomial"
+
+  
+summary(group_model)
+
+```
+
+## Part b
+
+Use a procedure discussed in this class to automatically perform variable selection on the full model
+
+```{r}
+#| label: x
+
+x
+
+```
+
+## Part c
+
+Explain what you are doing on each step of your procedure and why you are doing it, and include at least one relevant graph to support your explanation. Attempt as best you can to write your explanation in language that someone without much statistical knowledge can understand.
+
+x
+
+## Part d
+
+Identify which variables are left in the final model and explain why those variables should still be included.
+
+
+## Section 5: Classification Accuracy Metrics
+
+The data4 file contains 10-fold cross-validated predictions from Dr. Wynne’s final model; that is, the final model was fit on 9 folds and used to predict the group for the women in the remaining fold.
+
+## Part a
+
+Obtain a confusion matrix 
+
+```{r}
+#| label: x
+
+x
+
+```
+
+## Part b
+
+Explain what a true positive, true negative, false positive, and false negative represent in the context of the problem and identify how many of each were obtained in the sample data.
+
+x
+
+## Part c
+
+Discuss whether you would penalize a false positive or false negative more heavily (or if they should be equally penalized) if you were to write a custom loss function, and explain why (you do not need to actually write the custom loss function).
+
+x
+
+## Part d
+
+Plot a receiver operating characteristic curve and obtain the area under the curve
+
+```{r}
+#| label: x
+
+x
+
+```
+
+## Part e
+
+Obtain a classification accuracy metric based on the predicted probabilities of being a Case vs. Control
+
+```{r}
+#| label: x
+
+x
+
+```
+
+## Part f
+
+Explain what metric you computed and how it is computed. Attempt as best you can to write your explanation in language that someone without much statistical knowledge can understand.
+
+x
+
+
+
+
+
+
+
+
+
+

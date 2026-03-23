@@ -1,0 +1,294 @@
+---
+title: "Activity: Post-Selection Inference"
+subtitle: "Math 437"
+format: html
+editor: source
+---
+
+## The Problem of Post-Selection Inference
+
+When we perform variable selection, we are propagating errors throughout the selection process - keeping useless variables in the model and removing useful ones. Therefore, we do not want to use the entire data set to both *select* the variables in our final model and peform *inference* on the final model without somehow adjusting for the massively inflated family-wise error rate.
+
+Here we will assume that we will use LASSO to automatically perform variable selection, but would like to perform inference to determine which variables are significant (or estimate confidence intervals for the resulting slopes) conditional on those variables being selected.
+
+## Sample Splitting
+
+The easiest method of doing inference after variables have been selected using the LASSO method is to simply use the test set for inference.
+
+The best way to think about this is that we used up our training data on model exploration and figuring out the set of hypotheses to test, and then once those hypotheses have been generated, we test those hypotheses on a completely independent set of data.
+
+This is not unusual in the world of science, where a "pilot study" is used to generate hypotheses about the relationships between variables before a second study collects new data to test those hypotheses. (The difference is that, due to costs, pilot studies tend to have small samples, whereas the training set is usually at least the size of the test set.)
+
+```{r}
+#| label: create Lahman dataset
+#| warning: false
+#| message: false
+library(Lahman)
+library(tidyverse)
+library(tidymodels)
+library(glmnet) # just in case we need the actual package
+library(selectiveInference)
+
+# Regression
+salaries <- Salaries %>%
+  dplyr::select(playerID, yearID, teamID, salary)
+peopleInfo <- People %>%
+  dplyr::select(playerID, birthYear, birthMonth, nameLast,
+         nameFirst, bats)
+batting <- battingStats() %>% 
+  left_join(salaries, 
+            by =c("playerID", "yearID", "teamID")) %>%
+  left_join(peopleInfo, by = "playerID") %>%
+  mutate(age = yearID - birthYear - 
+           1L *(birthMonth >= 10)) %>%
+  arrange(playerID, yearID, stint)
+
+batting_2016 <- batting %>% filter(yearID == 2016,
+                                   !is.na(salary),
+                                   G >= 100, AB >= 200
+                                   ) %>%
+  mutate(salary = log10(salary), # there's a reason for this, I promise
+         lgID = factor(lgID, levels = c("AL", "NL"))) # fix the defunct league issue
+```
+
+```{r}
+#| label: split training-test
+
+set.seed(112)
+batting_2016_split <- initial_split(batting_2016, prop = 0.75)
+batting_train <- training(batting_2016_split)
+batting_test <- testing(batting_2016_split)
+```
+
+```{r}
+#| label: lasso model with tidymodels
+lasso_model <- linear_reg(mode = "regression", 
+                          engine = "glmnet",
+                          penalty = tune(), # let's tune the lambda penalty term
+                          mixture = 1) # mixture = 1 specifies pure LASSO
+
+lasso_recipe <- recipe(
+  salary ~ G + R + H + X2B + X3B + HR + RBI + 
+    SB + CS + BB + SO + IBB + HBP + SH + SF + GIDP + 
+    age + lgID, # response ~ predictors
+  data = batting_train
+) |>
+  step_normalize(all_numeric_predictors()) |> # don't scale the response
+  step_dummy(all_nominal_predictors())
+
+lasso_wflow <- workflow() |>
+  add_model(lasso_model) |>
+  add_recipe(lasso_recipe)
+
+# tune penalty term
+lasso_tune1 <- tune_grid(lasso_wflow, 
+                      resamples = batting_cv, 
+                      metrics = metric_set(rmse),
+                      grid = grid_regular(penalty(range = c(-5, 2)), levels = 50))
+
+lasso_best <- lasso_tune1 |>
+  select_by_one_std_err(
+    metric = "rmse",
+    desc(penalty) # order penalty from largest (highest bias = simplest model) to smallest
+)
+
+# fit finalized model
+lasso_wflow_final <- lasso_wflow |>
+  finalize_workflow(parameters = lasso_best) 
+
+lasso_fit <- lasso_wflow_final |>
+  fit(data = batting_train)
+```
+
+At this point we have used LASSO for variable selection, but the nonzero coefficients are biased (both due to the general LASSO bias and the error propagation). To "debias" the model, we fit an ordinary least-squares regression on the test set with the selected predictors.
+
+```{r}
+#| label: get model predictors
+
+```
+
+Here the LASSO model selects HR, RBI, BB, IBB, GIDP, and age as relevant predictors. We can thus fit this model on the test set:
+
+```{r}
+#| label: create ols model with selected predictors
+
+```
+
+```{r}
+#| label: fit ols model on test set
+
+```
+
+Note that we could just use `lm` instead of using tidymodels and `extract_fit_engine()`:
+
+```{r}
+#| label: fit ols model with lm
+
+```
+
+This suggests that after variable selection, only HR and age are significant predictors of salary at the 5% significance level. We *do not* eliminate non-significant predictors and re-fit the model.
+
+One potential concern about sample splitting is that we sacrifice quite a bit of data to model selection that would have otherwise been used for inference; thus, power tends to be noticeably lower than it would be in the case where our model was pre-specified in advance. (Of course, a decrease in power tends to happen for *any* procedure that tests multiple hypotheses; the difference here is that those hypotheses are being implicitly tested during model selection.) Re-fitting the model using the entire dataset (training and test together) may be recommended in some circumstances.
+
+A more significant concern about sample splitting is that the training and test sets are assumed to be independent samples from the same population. In situations where this assumption is clearly not justified (e.g., time series data), sample splitting decisions become nontrivial.
+
+## Knockoffs
+
+The general idea of the "knockoff filter" and related methods is to augment the data with "knockoff variables," that is, predictor variables that "look like" the original predictors in the model. 
+
+Using the default options in the `knockoff` package, a LASSO model is fit on the augmented data (that is, $y \sim X + X_k$, where $X$ is a matrix of actual predictor values and $X_k$ is a matrix of the knockoff variables), with $\lambda$ selected using 10-fold cross-validation.
+
+The default option for the test statistic for each variable $x_j$ is the difference of the absolute values of the LASSO model coefficients between $x_j$ and its corresponding knockoff at the given $\lambda$ value. Variables are then selected based on the desired FDR.
+
+```{r}
+#| label: create predictor matrix and response vector
+## Don't have to standardize first, but probably should
+batting_predictors <- scale(
+  model.matrix(
+    salary ~ G +  R + H + X2B + X3B + HR + RBI +
+         SB + CS + BB + SO + IBB + HBP + SH + SF + GIDP + 
+         age + lgID, # response ~ predictors
+    data = batting_2016  
+  )[,-1]
+)
+
+batting_response <- batting_2016$salary
+
+```
+
+The knockoff variables are simulated from a multivariate normal distribution with mean and covariance matrix based on the observed mean and covariance matrix of the sample data. Standardizing ensures that the mean is 0 and the covariance matrix is the sample correlation matrix.
+
+```{r}
+#| label: create knockoffs with create.second_order
+set.seed(39) # want a seed for reproducible knockoffs
+knockoff_predictors <- create.second_order(
+  X = batting_predictors
+)
+
+head(knockoff_predictors)
+```
+
+Note that in the case of something like our `lgIDNL` indicator variable, the assumption of normality is incorrect.
+
+We now fit the LASSO model using cross-validation:
+
+```{r}
+#| label: fit cv.glmnet with knockoffs
+
+set.seed(105)
+lasso_coef_diffs <- stat.glmnet_coefdiff(
+  X = batting_predictors, # real predictors
+  X_k = knockoff_predictors, 
+  y = batting_response, 
+  family = "gaussian" # argument to pass to cv.glmnet to indicate linear regression
+)
+
+lasso_coef_diffs
+
+```
+
+A value of 0 indicates that likely both the original variable and the knockoff variable are absent from the model at the cross-validated $\lambda$. A positive value indicates that the original variable has a larger slope (in absolute value) than the corresponding knockoff variable in the selected model, while a negative value indicates that the corresponding knockoff variable has a larger slope (i.e., our doppelganger variable created by completing ignoring `salary` is more important for predicting salary).
+
+Once we have these values, we use a False Discovery Rate-based threshold to determine which variables are significant. Note that in this case, I've intentionally inflated the FDR threshold to 0.40 so that *something* will get chosen as significant.
+
+```{r}
+#| label: set FDR threshold
+fdr_threshold <- knockoff.threshold(
+  lasso_coef_diffs,
+  fdr = 0.40
+)
+
+which(lasso_coef_diffs > fdr_threshold) # Strict inequality, based on the documentation
+```
+
+Notice that this gives us the indices of the selected predictors, that is, the columns of the model matrix that are concluded to have a statistically significant relationship with the response variable.
+
+We can do all of this in one step with the `knockoff.filter` function:
+
+```{r}
+#| label: knockoff.filter to do everything in 1 step
+set.seed(39)
+knockoff.filter(
+  X = batting_predictors,
+  y = batting_response,
+  fdr = 0.40
+)
+```
+
+Note that there is some randomness here; different seeds may give different variable selections.
+
+## Exact Post-Selection Inference
+
+The idea behind post-selection inference is to define the event, "the LASSO model with some fixed $\lambda$ sets a particular set of slope estimates to 0." Inference about parameters can then be obtained *conditional* on this event.
+
+Under the traditional assumptions of linear regression, without model selection, the conditional distribution of $y$ given $X$ is normal. Further conditioning on the model selected suggests that the conditional distribution of $y$ is instead a truncated normal distribution:
+
+$$
+F(t) = \frac{\int_a^t e^{-\frac{1}{2}\left(\frac{x - \mu}{\sigma}\right)^2} dx}{\int_a^\infty e^{-\frac{1}{2}\left(\frac{x - \mu}{\sigma}\right)^2} dx}
+$$
+
+for $t \geq a$ and 0 otherwise.
+
+This insight allows for confidence intervals for the slopes conditional on the set of predictor variables selected by LASSO.
+
+To obtain these intervals, we first need to do cross-validation to find the best value of $\lambda$.
+
+```{r}
+#| label: cv with cv.glmnet
+
+batting_cv_lasso <- cv.glmnet(
+  x = batting_predictors,
+  y = batting_response,
+  alpha = 1,     # LASSO
+  standardize = F     # because we already standardized predictors
+)
+
+```
+
+We can then get the coefficients of the LASSO model with this value of $\lambda$ using the `coef` function:
+
+```{r}
+#| label: get coefficients with coef
+
+lasso_betas <- coef(
+  batting_cv_lasso,
+  s = "lambda.min"
+)[-1]     # get rid of intercept
+
+lasso_betas
+
+```
+
+```{r}
+#| label: what lambda did we choose
+
+best_lam <- batting_cv_lasso$lambda.min
+
+best_lam
+
+```
+
+Note that $\lambda$ is parametrized differently between the `glmnet` and `selectiveInference` packages; this $\lambda$ is too small to use with post-selection inference by a factor of n.
+
+```{r}
+#| label: perform inference with fixedLassoInf
+
+n <- nrow(batting_2016)
+inference_results <- fixedLassoInf(
+  x = batting_predictors,
+  y = batting_response,
+  beta = lasso_betas,
+  lambda = best_lam * n,     # actual correct penalty for fixedLassoInf
+  alpha = .05     # sig. level
+)
+
+```
+
+Which variables are significant? Note that the p-values are one-sided, because the algorithm conditions on the sign of the coefficient estimate.
+
+```{r}
+#| label: check significance
+
+```
+
+Note that these coefficient estimates and confidence intervals are on the *standardized* scale, and an intercept is not estimated as it is not usually of interest when doing inference.

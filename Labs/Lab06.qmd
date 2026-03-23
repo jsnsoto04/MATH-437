@@ -1,7 +1,7 @@
 ---
 title: "Lab Assignment #6"
 author: "Math 437 - Modern Data Analysis - Jason Soto"
-format: html
+format: pdf
 editor: source
 ---
 
@@ -239,7 +239,7 @@ Given an optimal cross-validated value of $\lambda$, does ridge regression or LA
 
 #### Solution
 
-When looking back at our produced models, ridge regression keeps all of our variables, while LASSO removes unnecessary variables when given some best lambda. Thus, LASSO produces simpler models that are easier to interpret.
+When looking back at our produced models, ridge regression keeps all of our variables, while LASSO removes unnecessary variables when given some best $\lambda$. Thus, LASSO produces simpler models that are easier to interpret.
 
 ## Problem 2: Post-Selection Inference with the LASSO
 
@@ -253,6 +253,20 @@ Using `tidymodels`, divide the `public` dataset into a training set and a test s
 
 #### Solution
 
+```{r}
+#| label: Data Split
+
+public$log_Average_Total_Cost <- log10(public$Average_Total_Cost)
+
+set.seed(67)
+public_split <- initial_split(public, prop = .75)
+
+public_train <- training(public_split)
+public_test <- testing(public_split)
+
+```
+
+
 ### Part b (Code: 1.5 pts)
 
 Using `tidymodels`, create a workflow that will fit a LASSO model predicting the base 10 log of `Average_Total_Cost` from the other variables in the dataset (except, obviously, `Name`).
@@ -265,6 +279,35 @@ HINT 3: You could use the `step_log()` function to transform `Average_Total_Cost
 
 #### Solution
 
+```{r}
+#| label: Set Up
+
+# public$Average_Total_Cost <- log10(public$Average_Total_Cost) will be done in an earlier chunk  
+
+lasso_wflow <- workflow()
+
+lasso_model <- linear_reg(
+  mode = "regression", 
+  engine = "glmnet", 
+  penalty = tune(), 
+  mixture = 1 # pure LASSO model
+)
+
+lasso_recipe <- ridge_recipe <- recipe(
+  log_Average_Total_Cost ~ .,
+  data = public_train
+) |>
+  step_rm(Name, Average_Total_Cost) |>     # removes "Name" and "Average_Total_Cost" variable
+  step_normalize(all_numeric_predictors()) |>     # always convert numeric predictors to z-scores, to avoid issues with scale
+  step_dummy(all_nominal_predictors())     # as usual, requires indicator variables
+
+lasso_wflow <- lasso_wflow |> 
+  add_model(lasso_model) |>
+  add_recipe(lasso_recipe)     # same recipe for penalized regression, whether ridge or LASSO
+
+```
+
+
 ### Part c (Code: 2 pts)
 
 Use 10-fold cross-validation to determine the optimal value of $\lambda$ using the 1-standard error rule and the RMSE metric. It turns out that not a lot of shrinkage is necessary here; use a logarithmically spaced grid from $10^{-4}$ to $10^{-1}$ in increments of roughly 0.1 on the log10-scale (i.e., use the `expand.grid` function to manually set up your grid, or use `grid_regular` to automatically set it up).
@@ -272,6 +315,43 @@ Use 10-fold cross-validation to determine the optimal value of $\lambda$ using t
 What is the optimal value of $\lambda$ according to your cross-validation? What is value of $\lambda$ should be selected according to the one-standard-error rule?
 
 #### Solution
+
+```{r}
+#| label: Folds, Tunes, Bests
+
+public_cv <- vfold_cv(
+  public_train,     # only pass the training set
+  v = 10,
+  repeats = 1     # single 10-fold CV
+)
+
+lasso_tune <- tune_grid(
+  lasso_wflow,
+  resamples = public_cv,
+  grid = grid_regular(
+    penalty(range = c(-4, -1)),
+    levels = 31
+    )
+)
+  
+lasso_best_by_1se <- select_by_one_std_err(
+  lasso_tune,
+  metric = "rmse",
+  desc(penalty)
+)
+
+lasso_best_by_rmse <- select_best(
+  lasso_tune,
+  metric = "rmse"
+)
+
+lasso_best_by_rmse
+lasso_best_by_1se
+
+```
+The optimal value of $\lambda$ according to my cross-validation is .0025.
+The value of $\lambda$ selected using the one-standard-error rule is 0.01.
+
 
 ### Part d (Code: 2 pts)
 
@@ -281,6 +361,35 @@ HINT: Remember to finalize the workflow using the appropriate `penalty` value an
 
 #### Solution
 
+```{r}
+#| label: Finalizations
+
+lasso_final_wflow <- finalize_workflow(
+  lasso_wflow,
+  parameters = lasso_best_by_1se     # this thing already has penalty defined for me
+)
+
+lasso_fit <- fit(
+  lasso_final_wflow,
+  data = public_train
+)
+
+```
+
+```{r}
+#| label: Estimate Test RMSE
+
+lasso_predictions <- lasso_fit |>
+  augment(new_data = public_test)
+
+lasso_test_rmse <- rmse(lasso_predictions, truth = log_Average_Total_Cost, estimate = .pred)
+
+lasso_predictions
+lasso_test_rmse
+
+```
+
+
 ### Part e (Code: 2 pts; Explanation: 1 pt)
 
 Which predictor variables were selected by the LASSO model? How do you know?
@@ -288,6 +397,30 @@ Which predictor variables were selected by the LASSO model? How do you know?
 Fit a least-squares regression model on the test set containing *only* the selected variables. Then, obtain confidence intervals for the slope corresponding to each predictor. Which variables are significantly linearly associated with the log of `Average_Total_Cost`?
 
 #### Solution
+
+```{r}
+#| label: Detect Non-Zero Slopes
+
+tidy(lasso_fit)
+
+```
+
+The selected predictor variables is SAT, Instructional_Expenditure, Pell_Grant, Retention_Rate, and Federal_Loan.
+I know this because I used the tidy function.
+
+```{r}
+#| label: Least-Squares Regression Model
+
+lm_fit <- lm(log_Average_Total_Cost ~ SAT + Instructional_Expenditure + Pell_Grant + Retention_Rate + Federal_Loan,
+  data = public_test
+)
+
+summary(lm_fit)
+confint(lm_fit)
+
+```
+
+The variables that are significantly linearly associated with the log of Average_Total_Cost is Instructional_Expenditure, Retention_Rate, and Federal_Loan since their confidence intervals do not include 0.
 
 ### Part f (Code: 2 pts)
 
@@ -300,4 +433,43 @@ HINT: HINT: You should first fit the LASSO model using the entire dataset using 
 NOTE: You may get a warning message about the KKT conditions not being satisfied. The KKT conditions are a set of conditions that are sufficient for proving that a solution optimizes some optimization problem. Essentially, the warning says we're not 100% sure that this is actually the correct solution.
 
 #### Solution
+
+# Use 6.5.2 (1a)?
+
+```{r}
+#| label: Set Ups
+
+sig.level = .05
+lasso_response <- public$log_Average_Total_Cost
+
+cv_lasso <- cv.glmnet(
+  x = lasso_predictions,
+  y = lasso_response,
+  alpha = 1,     # LASSO
+  standardize = F     # because we already standardized predictors
+)
+
+lasso_betas <- coef(
+cv_lasso,
+s = "lambda.min"
+)[-1] # get rid of intercept
+
+```
+
+```{r}
+#| label: x
+
+results <- fixedLassoInf(
+  x = lasso_predictions,
+  y = lasso_response,
+  beta = lasso_betas,
+  lambda = n * lasso_best_by_1se,
+  alpha = sig.level
+)
+
+```
+
+
+
+
 
