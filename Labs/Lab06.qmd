@@ -293,7 +293,7 @@ lasso_model <- linear_reg(
   mixture = 1 # pure LASSO model
 )
 
-lasso_recipe <- ridge_recipe <- recipe(
+lasso_recipe <- recipe(
   log_Average_Total_Cost ~ .,
   data = public_train
 ) |>
@@ -434,38 +434,64 @@ NOTE: You may get a warning message about the KKT conditions not being satisfied
 
 #### Solution
 
-# Use 6.5.2 (1a)?
 
 ```{r}
-#| label: Set Ups
+#| label: Fit LASSO
 
-sig.level = .05
-lasso_response <- public$log_Average_Total_Cost
+public_predictors <- scale(
+  model.matrix(
+    log_Average_Total_Cost ~ . - Name,
+    data = public
+  )[, -1]
+)
 
-cv_lasso <- cv.glmnet(
-  x = lasso_predictions,
-  y = lasso_response,
+public_response <- public$log_Average_Total_Cost
+
+public_cv_lasso <- cv.glmnet(
+  x = public_predictors,
+  y = public_response,
   alpha = 1,     # LASSO
   standardize = F     # because we already standardized predictors
 )
 
-lasso_betas <- coef(
-cv_lasso,
-s = "lambda.min"
-)[-1] # get rid of intercept
+public_cv_lasso
 
 ```
 
 ```{r}
-#| label: x
+#| label: Coefficients & Best Lambda
+
+public_betas <- coef(
+  public_cv_lasso,
+  s = "lambda.1se"
+  )[-1] # get rid of intercept
+
+lasso_best_by_1se <- public_cv_lasso$lambda.1se
+
+```
+
+```{r}
+#| label: Results
+
+n <- nrow(public)
+sig.level <- .05
 
 results <- fixedLassoInf(
-  x = lasso_predictions,
-  y = lasso_response,
-  beta = lasso_betas,
+  x = public_predictors,
+  y = public_response,
+  beta = public_betas,
   lambda = n * lasso_best_by_1se,
   alpha = sig.level
 )
+
+```
+
+```{r}
+#| label: Variables and Confidence Interval
+
+names(results$var)
+
+results$ci
 
 ```
 

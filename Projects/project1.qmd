@@ -21,6 +21,7 @@ library(selectiveInference)
 library(nnet)
 library(boot)
 library(coin)
+library(broom)
 
 data1 <- readr::read_csv(here::here("Data/data1.csv"))
 data2 <- readr::read_csv(here::here("Data/data2.csv"))
@@ -31,14 +32,14 @@ data4 <- readr::read_csv(here::here("Data/data4.csv"))
 
 ## Section 1: Linear Modeling
 
-The data1 file contains the frequency of an immune cell known as a basophil (as a percentage of mononuclear cells in the blood sample) for 144 women. Blood samples were taken from women at least 2 years after their most recent delivery. Some of these women (“Case”) experienced hypertensive disorders and others (“Control”) did not. Your goal is to determine whether there is a significant difference in basophil frequency later in life between these two groups of women. We will start by fitting a linear model to predict basophil frequency from the Group.
+The data1 file contains the frequency of an immune cell known as a basophil (as a percentage of mononuclear cells in the blood sample) for 144 women. Blood samples were taken from women at least 2 years after their most recent delivery. Some of these women (“Case”) experienced hypertensive disorders and others (“Control”) did not. Your goal is to determine whether there is a significant difference in basophil frequency later in life between these two groups of women. We will start by fitting a linear model to predict basophil frequency from the Group
 
 ## Part a
 
-Fit the linear model and obtain the coefficients.
+**Fit the linear model and obtain the coefficients.**
 
 ```{r}
-#| label: x
+#| label: Linear Model
 
 # Fit linear model
 blm <- lm(Basophil_frequency ~ Group, data = data1)
@@ -51,7 +52,7 @@ summary(blm)
 
 ## Part b
 
-Interpret the slope and intercept of the linear model.
+**Interpret the slope and intercept of the linear model.**
 
 Based on our fitted model,
 Basophil_frequency = 1.514 + .354(Group == "Control")
@@ -60,13 +61,13 @@ So, based on same model, our mean for Basophil_frequency is predicted to be at 1
 
 ## Part c
 
-Argue that at least one assumption for inference with the linear model is not met, and support your argument with at least one graph.
+**Argue that at least one assumption for inference with the linear model is not met, and support your argument with at least one graph.**
 
 Our first plot, residuals vs plots, residuals have a very clearly unequal spread across our fitted values. This suggest that variance may not be a constant.
 Next, the normality assumption is not met. Below, the Q-Q plot shows us that the residuals deviate from the straight line at the tails. This tells us that they are not normally distributed.
 
 ```{r}
-#| label: Plot
+#| label: Plot lm
 
 plot(blm, which = 1)
 plot(blm, which = 2)
@@ -78,15 +79,17 @@ plot(blm, which = 2)
 
 Since a linear model does not seem appropriate, a nonparametric test (such as Mann-Whitney U test) is likely better for determining whether there is a significant difference in basophil frequency between the two groups. Perform an appropriate Mann-Whitney U test with the data in the data1 file
 
-## Part a **************************************************************************
+## Part a 
 
-Write the null hypothesis for the test in the context of this problem.
+**Write the null hypothesis for the test in the context of this problem.**
 
 H0: The distribution of basophil frequency is the same for women in the Case group and the Control group.
 
+Another interpretation is that there is no significant difference in Basophil frequencies between the Control and Case groups.
+
 ## Part b
 
-Explain the general concepts/procedure behind permutation-based tests such as the Mann-Whitney test. Attempt as best you can to write your explanation in language that someone without much statistical knowledge can understand.
+**Explain the general concepts/procedure behind permutation-based tests such as the Mann-Whitney test. Attempt as best you can to write your explanation in language that someone without much statistical knowledge can understand.**
 
   To start, the purpose of permutation-based tests is to find if some specific statistical difference between two groups is caused by chance or by reason. An example could be finding out why there may be a difference in reaction time between men and women. We will find this through sample data, which is basically data we find or are given, with intent to represent a larger population without bias.
     So, we must define a null hypothesis and an alternative hypothesis, hypothesis being a statement that we want to test about the data. Under a Mann-Whitney Test, our null hypothesis is that there is no difference between the medians of the populations, or, that their probabilistic distributions are equal. The alternative is the opposite, that there is a difference.
@@ -95,35 +98,37 @@ Explain the general concepts/procedure behind permutation-based tests such as th
 
 ## Part c
 
-Perform the Mann-Whitney test and write a conclusion in the context of the problem.
+**Perform the Mann-Whitney test and write a conclusion in the context of the problem.**
 
 ```{r}
 #| label: mann-whitney test
 
-data1$Group <- factor(data1$Group)
+set.seed(67)
+
+data1$Group <- factor(
+  data1$Group,
+  levels = c("Control", "Case"))
 
 mw_test <- wilcox_test(
   Basophil_frequency ~ Group,
   data = data1,
-  alternative = "two.sided",   # Checks for any side being greater than the other, rather than one side being greater/less
+  alternative = "two.sided",   # Checks for any side being greater than the other,
+                               # rather than one side being greater/less
   distribution = "approximate"
 )
 
 pvalue(mw_test)
 
 ```
-The Mann-Whitney U test gives us a p-value of .0163, which less than .05. This shows a statistically significant difference in basophil frequency between the Case and Control groups. Thus, we reject the null, hence, the distributions of basophil frequency are not the same for the two groups.
+The Mann-Whitney U test gives us a p-value of .0185, which less than .05. This shows a statistically significant difference in basophil frequency between the Case and Control groups. Thus, we reject the null, hence, the distributions of basophil frequency are not the same for the two groups.
 
 ### Section 2b: Adjusting p-values
 
 The authors actually performed Mann-Whitney U tests on all 2,191 immune response markers that they measured from the women’s blood samples. The data2 file contains the p-values from these Mann-Whitney tests. Determine which (if any) immune markers show a significant difference between the Case and Control groups.
 
-(Note to self, they performed it on all the other stuff along with Basophil_frequency, which is an immune response marker
-
 ## Part a
 
-Do something sensible with the p-values to correct for having done over 2000 tests.
-(Note to self, if p-value < 5, then 5% would look significant but just be luck, we need to reduce false positives, reduce type 1 errors, reduce fdr, for many p-values)
+**Do something sensible with the p-values to correct for having done over 2000 tests.**
 
 ```{r}
 #| label: P-Value Adjust
@@ -137,7 +142,8 @@ q.values.BH <- p.adjust(data2$pvalue, method = "BH")
 # Count significant markers at 0.05 level
 sum(q.values.BH < 0.05)
 
-# View which markers are significant (Unnecessary as there are none, but necessary if there was, but there is none in this)
+# View which markers are significant (Unnecessary as there are none,
+# but necessary if there was, but there is none in this)
 
 # data2$adj_p <- q.values.BH
 # significant_markers <- data2[data2$adj_p < 0.05, ]
@@ -148,18 +154,17 @@ sum(q.values.BH < 0.05)
 
 ## Part b
 
-Explain (in the text) what you did, why you did it, and generally how the method works. Attempt as best you can to write your explanation in language that someone without much statistical knowledge can understand.
+**Explain (in the text) what you did, why you did it, and generally how the method works. Attempt as best you can to write your explanation in language that someone without much statistical knowledge can understand.**
 
-So back to the p-value. When it is below 5%, we declare that the test is statistically significant, which means that the observation did not happen by pure luck. Data2 provided p-values for other immune response markers for the Control and Case group. There are supposedly 99 significant tests. Though, it is likely that there are many false positives, which I can explain this as testing positive for a baby but not really being pregnant. To reduce false positives we want to control that by adjusting the p-values using methods discovered by masters of data. Once we keep this False Discovery Rate under control, we found that there are truly no significant markers in Data2.
+So back to the p-value. When it is below 5%, we declare that the test is statistically significant, which means that the observation did not happen by pure luck. Data2 provided p-values for other immune response markers for the Control and Case group. There are supposedly 99 significant tests. Though, it is likely that there are many false positives, which I can explain this as testing positive for a baby but not really being pregnant. To reduce false positives we want to control the False Discovery Rate by adjusting the p-values using methods discovered by masters of data. Once we keep the FDR under control, we found that there are truly no significant markers in Data2.
 
 ## Section 3: Bootstrap Confidence Interval
 
-Using a bootstrap procedure and the data1 file, obtain a 95% confidence interval for the difference in population median basophil frequency between Cases and Controls.
-You do not need to interpret the confidence interval.
+Using a bootstrap procedure and the data1 file, obtain a 95% confidence interval for the difference in population median basophil frequency between Cases and Controls. You do not need to interpret the confidence interval.
 
 ## Part a
 
-Obtain a 95% bootstrap confidence interval using any bootstrap procedure discussed in lecture/lab.
+**Obtain a 95% bootstrap confidence interval using any bootstrap procedure discussed in lecture/lab.**
 
 ```{r}
 #| label: Bootstrap CI
@@ -207,7 +212,7 @@ boot.ci(
 
 ## Part b
 
-Explain the general concepts/procedure behind bootstrap resampling and how it is implemented in your code. Attempt as best you can to write your explanation in language that someone without much statistical knowledge can understand.
+**Explain the general concepts/procedure behind bootstrap resampling and how it is implemented in your code. Attempt as best you can to write your explanation in language that someone without much statistical knowledge can understand.**
 
   To start, bootstrap resampling is a method used to understand how much a statistic (like a median) might vary. We use the given data and act as if it represents the population.
   Next, we want to repeatedly create new datasets from the original one by sampling with replacement. Basically, we create a new dataset with the original observations randomly, meaning any observation can be used multiple times or not at all. Each of these datasets is called a bootstrap sample and are equal size as the original dataset. The bootstrap samples act as replacements for real samples.
@@ -219,47 +224,140 @@ Explain the general concepts/procedure behind bootstrap resampling and how it is
 
 The data3 file contains the levels of 280 immune markers collected on a sample of 66 women who were at least 28 weeks pregnant but had not yet delivered. Using these markers, fit a logistic regression model to predict if the mother is experiencing a hypertensive disorder (Case) or not (Control). Perform variable selection to eliminate irrelevant variables.
 
-For this problem, you do not need to split into a training and holdout set! Use the
-entire dataset as a training set and perform cross-validation instead!
-
 ## Part a
 
-Create a logistic regression model that classifies a mother as a Case or Control based on all immune response variables.
+**Create a logistic regression model that classifies a mother as a Case or Control based on all immune response variables.**
 
 ```{r}
-#| label: x
+#| label: Logistic Regression Model
 
-group_model <- glm(
+set.seed(67)
+
+# Factor
+data3$Group <- factor(data3$Group)
+
+# Set up workflow
+data3_wflow <- workflow()
+
+# Set up logistic regression model
+data3_model <- logistic_reg(
+  mode = "classification",
+  engine = "glm"
+)
+
+# Set up recipe
+data3_recipe <- recipe(
   Group ~ .,
-  data = data3,
-  family = "binomial"
+  data = data3
+) |>
+  step_rm(sampleID) |>
+  step_dummy(all_nominal_predictors())
 
-  
-summary(group_model)
+# Build workflow
+data3_wflow <- data3_wflow |>
+  add_model(data3_model) |>
+  add_recipe(data3_recipe)
+
+# Fit model
+data3_fit <- fit(
+  data3_wflow,
+  data = data3
+)
+
+# View model coefficients
+tidy(extract_fit_engine(data3_fit))
 
 ```
 
 ## Part b
 
-Use a procedure discussed in this class to automatically perform variable selection on the full model
+**Use a procedure discussed in this class to automatically perform variable selection on the full model.**
 
 ```{r}
-#| label: x
+#| label: Monster
 
-x
+# Set up LASSO logistic regression model
+lasso_model <- logistic_reg(
+  mode = "classification",
+  engine = "glmnet",
+  penalty = tune(),
+  mixture = 1     # LASSO
+)
+
+# Workflow
+lasso_wflow <- workflow() |>
+  add_model(lasso_model) |>
+  add_recipe(data3_recipe)
+
+# Cross-validation
+set.seed(123)
+data3_cv <- vfold_cv(data3, v = 5)
+
+# Grid of lambda values
+lasso_tune <- tune_grid(
+  lasso_wflow,
+  resamples = data3_cv,
+  grid = grid_regular(
+    penalty(range = c(-4, 1)),
+    levels = 25
+  ),
+  metrics = metric_set(roc_auc)
+)
+
+# Select best lambda by one SE rule
+lasso_best <- select_by_one_std_err(
+  lasso_tune,
+  metric = "roc_auc",
+  desc(penalty)
+)
+
+# Finalize workflow
+lasso_final_wflow <- finalize_workflow(
+  lasso_wflow,
+  parameters = lasso_best
+)
+
+# Fit final model
+lasso_fit <- fit(
+  lasso_final_wflow,
+  data = data3
+)
+
+# Coefficients
+lasso_coef <- tidy(lasso_fit)
+
+selected_vars <- lasso_coef |> filter(estimate != 0)
+
+selected_vars$term
+
+length(selected_vars$term) - 1 # for intercept
 
 ```
 
 ## Part c
 
-Explain what you are doing on each step of your procedure and why you are doing it, and include at least one relevant graph to support your explanation. Attempt as best you can to write your explanation in language that someone without much statistical knowledge can understand.
+**Explain what you are doing on each step of your procedure and why you are doing it, and include at least one relevant graph to support your explanation. Attempt as best you can to write your explanation in language that someone without much statistical knowledge can understand.**
 
-x
+  We first set up the LASSO model, this takes away irrelevant variables by shrinking them to zero. We fixed the data with a recipe, so a sort of equation to follow, by removing sampleID (irrelevant) and turning any categorical variables into dummies so the model can use them. So turning categories like Control and Case into a 1 or 0.
+  Next, we did 5-fold cross-validation, which splits the data into 5 parts, trains the model on 4 parts, and tests on the 5th. This is repeated so we can see how well the model generalizes.
+  We measured performance using ROC AUC, basically this tells us how good the model is at telling apart Cases from Controls.
+  We tuned the penalty parameter to find the balance between keeping predictive markers and shrinking away the irrelevant ones. Basically making sure we don't keep irrelevants and don't lose important variables as best as we can
+  Finally, we fit the model on all the data using the selected penalty. The markers with non-zero coefficients are the ones that actually contribute to predicting hypertensive disorders.
+  The plot below, shows how the ROC AUC changes as the penalty increases. When the penalty is small, almost all markers are included. As the penalty grows, unimportant markers get removed, and the model becomes simpler.
+
+```{r}
+#| label: Plot tune
+
+autoplot(lasso_tune)
+
+```
+
 
 ## Part d
 
-Identify which variables are left in the final model and explain why those variables should still be included.
+**Identify which variables are left in the final model and explain why those variables should still be included.**
 
+LASSO automatically removed variables that did not help predict hypertensive disorders. The 29 markers left in the model are contain important information for telling between Cases from Controls. Each retained marker I believe represents a type of immune cell response that is relevant which is why they were kept in the model. The models are found above in under selected_vars$term.
 
 ## Section 5: Classification Accuracy Metrics
 
@@ -267,61 +365,92 @@ The data4 file contains 10-fold cross-validated predictions from Dr. Wynne’s f
 
 ## Part a
 
-Obtain a confusion matrix 
+**Obtain a confusion matrix.**
 
 ```{r}
-#| label: x
+#| label: Confusion Matrix
 
-x
+data4$Group <- factor(data4$Group, levels = c("Case", "Control"))
+data4$.pred_class <- factor(data4$.pred_class, levels = c("Case", "Control"))
+
+conf.mat <- conf_mat(
+  data = data4,
+  truth = Group, 
+  estimate = .pred_class
+)
+
+conf.mat
 
 ```
 
 ## Part b
 
-Explain what a true positive, true negative, false positive, and false negative represent in the context of the problem and identify how many of each were obtained in the sample data.
+**Explain what a true positive, true negative, false positive, and false negative represent in the context of the problem and identify how many of each were obtained in the sample data.**
 
-x
+Positive class in this data set is the Case class, women who experienced hypertensive disorders
+
+A True Positive (16) is a woman who was predicted to have experienced hypertensive disorders, experienced hypertensive disorders.
+A True Negative (28) is a woman who was NOT predicted to have experienced hypertensive disorders, did NOT experience hypertensive disorders.
+A False Positive (10) is that a woman who was predicted to have experienced hypertensive disorders, did NOT experience hypertensive disorders.
+A False Negative (12) is that a woman who was NOT predicted to have experienced hypertensive disorders, experienced hypertensive disorders.
 
 ## Part c
 
-Discuss whether you would penalize a false positive or false negative more heavily (or if they should be equally penalized) if you were to write a custom loss function, and explain why (you do not need to actually write the custom loss function).
+**Discuss whether you would penalize a false positive or false negative more heavily (or if they should be equally penalized) if you were to write a custom loss function, and explain why (you do not need to actually write the custom loss function).**
 
-x
+With context, I believe the one that should be penalized more is a false negative. Missing a true case of hypertensive disorder could result in a lack of necessary medical care and maybe serious health consequences. In comparison, a false positive is so minuscule as it may only lead to additional testing or anxiety.
 
 ## Part d
 
-Plot a receiver operating characteristic curve and obtain the area under the curve
+**Plot a receiver operating characteristic curve and obtain the area under the curve.**
 
 ```{r}
-#| label: x
+#| label: ROC Curve
 
-x
+# Construct the ROC curve
+roc_tibble <- roc_curve(
+  data = data4,
+  truth = Group, 
+  .pred_Case     # prob. of positive class
+)
+
+# Plot the ROC curve
+autoplot(roc_tibble)
+
+roc_auc(
+  data = data4,
+  truth = Group, 
+  .pred_Case     # prob. of positive class
+)
 
 ```
 
 ## Part e
 
-Obtain a classification accuracy metric based on the predicted probabilities of being a Case vs. Control
+**Obtain a classification accuracy metric based on the predicted probabilities of being a Case vs. Control.**
 
 ```{r}
-#| label: x
+#| label: Accuracy
 
-x
+Case_Accuracy <- brier_class(
+  data = data4,
+  truth = Group,     # must give it the prob. of first level
+  .pred_Case     # for K > 2 classes, need all .pred_{Class} probs.
+)
+
+CTRL_Accuracy <- brier_class(
+  data = data4,
+  truth = Group,     # must give it the prob. of first level
+  .pred_Control     # for K > 2 classes, need all .pred_{Class} probs.
+)
+
+Case_Accuracy
+CTRL_Accuracy
 
 ```
 
 ## Part f
 
-Explain what metric you computed and how it is computed. Attempt as best you can to write your explanation in language that someone without much statistical knowledge can understand.
+**Explain what metric you computed and how it is computed. Attempt as best you can to write your explanation in language that someone without much statistical knowledge can understand.**
 
-x
-
-
-
-
-
-
-
-
-
-
+The Brier score measures how accurate our predicted probabilities are. Instead of just checking if predictions are right or wrong, it looks at how close the predicted probability is to what actually happened. It is calculated by taking the squared difference between 100% (1) and the predicted probability, then averaging over all observations. A lower Brier score means better predictions as .25 means 50/50. Hence, Case accuracy, 0.2276, is better than the Control accuracy, 0.3876.
