@@ -1,0 +1,379 @@
+---
+title: "Lab Assignment #7"
+author: "Math 437 - Modern Data Analysis - Jason Soto"
+format: pdf
+editor: source
+---
+
+80-90% of modeling work is getting the data in a form suitable for modeling. Much of that work is intelligent data wrangling. Much of that "intelligent" is informed by good exploratory data analysis.
+
+In this lab will start exploratory data analysis on the `RateMyProfessor` dataset.
+
+Recall that a data dictionary for this dataset can be found at the [original data source](https://github.com/murrayds/aa_rmp/tree/master/data).
+
+```{r}
+#| label: do this at the beginning of every lab file
+#| message: false
+#| warning: false
+here::i_am("Labs/Lab07.qmd")
+
+# just load all the main tidyverse packages at once
+# including dplyr and ggplot2
+library(tidyverse)
+library(tidymodels)
+
+# load data
+RateMyProfessor <- readr::read_csv(here::here("Data/RateMyProfessor.csv"))
+
+# Use my training/holdout split
+set.seed(230)
+RMP_split <- initial_split(RateMyProfessor, prop = 0.80)
+RMP_train <- training(RMP_split)
+# we're not modeling here, ignore the test set
+#RMP_test <- testing(RMP_split)
+
+```
+
+This lab assignment is worth a total of **15 points**.
+
+**REMINDER**: Explore *only* the `RMP_train` dataset in this lab.
+
+## Problem 1: Univariate Exploration (3 pts total)
+
+Typically, the first thing we want to do is understand the context of our data: What are we actually trying to predict? Why? How is the model going to be used? What do we suspect needs to be included in the model? Is there anything that shouldn't be included (for practical and/or ethical reasons)?
+
+Typically, the second thing we want to do is split into a training and a holdout set, so that information from your holdout set doesn't "leak into" your exploration of the data. We did this in the chunk above.
+
+Then we start our exploratory data analysis on the training set by exploring the response variable. In this case, we have chosen `overall` as our response. We're looking for three big things:
+
+* How many values are missing? Is there a pattern to the missingness?
+* Does the distribution of values make real-world sense? Does it match our expectations?
+* What do we have to watch out for when modeling?
+
+### Part a (Explanation: 1 pt)
+
+What would you expect the distribution of `overall` to look like? Why? Consider center, variability, shape, and outliers, and try not to write with too much technical jargon.
+
+#### Solution
+
+I expect it to be skewed left, professors with better qualities get better grades you know. The center would likely be around 3.5–4.5. There may be a few low-rating outliers.
+
+### Part b (Code: 1 pt)
+
+Using the `summarize` function, obtain the mean, standard deviation, and five-number summary of `overall`.
+
+#### Solution
+
+```{r}
+#| label: Summarize 1
+
+RMP_train |>
+  summarize(
+    # each statistic is going on to its own line
+    n = n(),     # sample size
+    n_missing = sum(is.na(overall)),     # still counts missing
+    mean = mean(overall, na.rm = TRUE),     # because I already know missing data
+    sd = sd(overall, na.rm = TRUE),
+    minimum = min(overall, na.rm = TRUE),
+    q1 = quantile(overall, .25, na.rm = TRUE),
+    median = median(overall, na.rm = TRUE),
+    q3 = quantile(overall, .75, na.rm = TRUE),
+    maximum = max(overall, na.rm = TRUE)
+  )
+
+```
+
+
+### Part c (Code: 1 pt)
+
+Using the `ggplot2` package, construct a histogram of the distribution of `overall`. Play around with the `center` and `binwidth` arguments until you get a graph where you have a good idea of the shape of the distribution.
+
+Since you are just exploring the data right now, I don't care too much about getting the title or axis labels exactly right - as long as "next week you" knows what you're graphing, I'm okay with it, but there should be at least some minimal effort into making them informative.
+
+#### Solution
+
+```{r}
+#| label: Histogram 1
+
+ggplot(
+  data = RMP_train,
+  mapping = aes(
+    x = overall
+  )
+) +
+  geom_histogram(
+    center = .5,     # center of one bin
+    binwidth = .1,     # bin width
+  ) +
+  labs(
+    x = "Overall Rating of Professor",
+    y = "Number of Ratings",
+    title = "Rate My Professor Reviews"
+  )
+
+```
+
+
+### Part d (Explanation: 1 pt)
+
+Write 1-2 sentences describing anything interesting that you notice based on your summary and histogram. Some general questions to guide what "seems interesting":
+
+* Where do the ratings tend to be around? Does that match your expectation?
+* How spread out are the ratings around that center? Does that match your expectation?
+* Is there anything interesting about the shape of the distribution that would suggest further exploration (bimodality, extremely long left/right tail, etc.)?
+* Are there any outliers? If so, what professors do they correspond to, and is there anything interesting about those professors that warrants further exploration?
+
+Try to write your answer using similar language to how you described what you expected.
+
+#### Solution
+
+The ratings tend to mostly be around 3.5 and 4.5 as expected. Ratings are pretty spread out, we still get a somewhat hefty amount of lower ratings on the left from 3 and on, but it does shrink. I wouldn't say shrinking is exponential though, as expected. I don't think there's anything interesting that suggests further exploration. Can't really say there are any outliers.
+
+## Problem 2: Bivariate Exploration 1 (5 pts total)
+
+Once we've looked at our response variable, we start investigating potential explanatory/predictor variables. Some questions of interest here include, in addition to the questions from Problem 1:
+
+* What kind of relationship do we expect? Why? Is it shown in the data?
+* Are there any unusual (predictor, response) pairs? Any clusters of points that may indicate the influence of a third variable?
+* Are there any noticeable jumps/discontinuities, horizontal/vertical "bands of points", changes in trend/distribution, or similarly complex patterns that should be addressed when modeling?
+
+### Part a (Explanation: 1 pt)
+
+Pick one of the following variables: `interest`, `review_count`, or `scientific_age`. *Without doing anything with the data*, explain what you would expect to happen to the distribution of the `overall` rating as the value of that variable increases, and explain why. Try not to write with too much technical jargon.
+
+#### Solution
+
+I expect for the distribution of the `overall` rating to increase when the `interest` variable increases. So more bulk on the right of the histogram. This is because if there is more interest in the topic, the students will pay more attention, score better, and/or simply like the course better.
+
+### Part b (Code: 1 pt; Explanation: 1 pt)
+
+Repeat Problem 1 for the variable you chose in Part a.
+
+#### Solution
+
+What would you expect the distribution of `overall` to look like? Why? Consider center, variability, shape, and outliers, and try not to write with too much technical jargon.
+
+I expect the distribution of `interest` to be skewed right, just as knowledge as a student, there is a lack of interest for most classes I believe. However, I believe people leave more reviews on major classes rather than GE classes, so who knows. I would believe center to be a little on the left of 3. Maybe it will be almost a normal distribution? I am not sure.
+
+```{r}
+#| label: Summarize
+
+RMP_train |>
+  summarize(
+    # each statistic is going on to its own line
+    n = n(),     # sample size
+    n_missing = sum(is.na(interest)),     # still counts missing
+    mean = mean(interest, na.rm = TRUE),     # because I already know missing data
+    sd = sd(interest, na.rm = TRUE),
+    minimum = min(interest, na.rm = TRUE),
+    q1 = quantile(interest, .25, na.rm = TRUE),
+    median = median(interest, na.rm = TRUE),
+    q3 = quantile(interest, .75, na.rm = TRUE),
+    maximum = max(interest, na.rm = TRUE)
+    
+  )
+
+```
+
+```{r}
+#| label: Histogram 2
+
+ggplot(
+  data = RMP_train,
+  mapping = aes(
+    x = interest
+  )
+) +
+  geom_histogram(
+    center = .5,     # center of one bin
+    binwidth = .1,     # bin width
+  ) +
+  labs(
+    x = "Interest in Course",
+    y = "Number of Ratings",
+    title = "Rate My Professor Reviews"
+  )
+
+```
+
+So, my expectation was close-ish. The real graph looks close to normally distributed, but with the center at 3.5 and there is HUGE outliers at solid points of 1, 2, 3, 4, and 5. This is because I believe when reviewers are asked about their interest in the course, they'll simply put a whole number. There is more interest in classes than I expected and that makes sense, why go for higher education if you have no interest.
+
+### Part c (Code: 1 pt)
+
+Create a scatterplot showing the relationship between that variable and `overall`. If the relationship looks approximately linear, add a least-squares regression line (`method = "lm"`). If the relationship looks nonlinear, add a local regression curve (`method = "loess"`). If you can't tell (or the relationship is very weak), add at least one of the two.
+
+It's likely that with over 17,000 professors, this plot will be very messy and there will be lots of overlap. You may want to use `geom_point(alpha = 0.1)` to make points with more professors darker rather than using `geom_jitter()` to remove the overlap.
+
+#### Solution
+
+```{r}
+#| label: Scatterplot 1
+
+ggplot(
+  data = RMP_train,
+  mapping = aes(
+    x = interest,
+    y = overall
+  )
+) +
+  geom_point(alpha = 0.1) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    x = "Interest in Course",
+    y = "Overall Rating",
+    title = "Overall Rating vs Interest"
+  )
+
+```
+
+
+### Part d (Explanation: 1 pt)
+
+Write 1-2 sentences describing anything interesting that you notice based on the scatterplot. Try to address the questions suggested at the beginning of this problem and refer to what you expected to see in Part b.
+
+#### Solution
+
+Here’s a clean 1–2 sentence answer you can use:
+
+The scatterplot appears to show a mostly positive relationship between interest and overall rating, which matches my expectation that higher interest leads to higher ratings. However, we still see those vertical stripes due to interest variable being discrete-like, this helps suggest that the relationship is not perfectly linear.
+
+## Problem 3: Bivariate Exploration 2 (5 pts total)
+
+### Part a (Explanation: 1 pt)
+
+Choose any categorical or logical variable in the dataset other than `hotness`. Identify the possible levels of that variable. *Without doing anything with the data*, explain what you would expect to see when comparing the distribution of the `overall` rating across these categories, and explain why. Try not to write with too much technical jargon.
+
+#### Solution
+
+For my categorical variable, I will choose discipline. I thought accent first and it would probably be easier, but discipline might be more interesting, especially since this is real data. I don't know what to expect for STEM having lower ratings and any other course having higher due to difficulty. STEM I feel may have more accent maybe considering how universal it is.
+
+### Part b (Code: 1 pt)
+
+Using the `group_by` and `summarize` functions, obtain the number of observations in each category, as well as the mean, standard deviation, and five-number summary of `overall` within each category.
+
+#### Solution
+
+```{r}
+#| label: Summarize 2
+
+RMP_train |>
+  group_by(discipline) |>
+  summarize(
+    # each statistic is going on to its own line
+    n = n(),     # sample size
+    n_missing = sum(is.na(overall)),     # still counts missing
+    mean = mean(overall, na.rm = TRUE),     # because I already know missing data
+    sd = sd(overall, na.rm = TRUE),
+    minimum = min(overall, na.rm = TRUE),
+    q1 = quantile(overall, .25, na.rm = TRUE),
+    median = median(overall, na.rm = TRUE),
+    q3 = quantile(overall, .75, na.rm = TRUE),
+    maximum = max(overall, na.rm = TRUE)
+  )
+
+```
+
+### Part c (Code: 1 pt)
+
+Using the `ggplot2` package, construct a set of boxplots to compare the center and variability of the distribution of `overall` among the different categories.
+
+#### Solution
+
+```{r}
+#| label: grouped boxplots
+
+ggplot(
+  data = RMP_train,
+  mapping = aes(
+    x = discipline,     # Categorical on x-axis
+    y = overall,     # Numerical on x-axis
+    fill = discipline     # color the boxplots different colors
+  )
+) +
+  geom_boxplot() +
+  geom_point(alpha = 0.05) +
+  scale_fill_manual(
+    values = c( "Engineering" = "darkgrey",  "Humanities" = "dodgerblue", "Medical sciences" = "red", "Natural Sciences" = "darkgreen", "Social Sciences" = "brown4")
+  )
+
+```
+
+### Part d (Code: 1 pt)
+
+Using the `ggplot2` package, construct a set of histograms to show the distribution of `overall` within each category. Play around with the `center` and `binwidth` arguments until you get a set of graphs where you have a good idea of the shape of the distributions.
+
+NOTE: Passing the argument `scales = "free_y"` to `facet_wrap()` indicates to keep the x-axis fixed at 1-5 but keep the y-axis free. This will allow us to compare shapes even if there are many professors in one group and few professors in a different group.
+
+#### Solution
+
+```{r}
+#| label: Histograms
+
+ggplot(
+  data = RMP_train,
+  mapping = aes(
+    x = overall
+  )
+) +
+  geom_histogram(
+    center = .5,     # center of one bin
+    binwidth = .1,     # bin width
+  ) +
+  facet_wrap(~ discipline) +
+  labs(
+    x = "Overall Rating of Professor",
+    y = "Number of Ratings",
+    title = "Rate My Professor Reviews by Discipline"
+  )
+
+```
+
+
+### Part e (Explanation: 1 pt)
+
+Write 1-2 sentences describing anything interesting that you notice based on your summaries, boxplots, and histograms. Again, try to address the questions suggested at the beginning of Problem 2, and use similar language to how you described what you expected. 
+
+#### Solution
+
+This mostly went as expected, though, there were drastic stuff I did not think about. Unfortunately, I am not in the elite category as Mathematics falls under natural sciences, so there are better ratings there compared to another 2 I will mention. But yeah, natural sciences has similar ratings to social sciences except still has lower ratings. Next, Engineering and Medical Sciences have really low amount of ratings which makes sense, they are brutal disciplines and it completly slipped my mind. But long story short, distribution wise, they are all mostly positive ratings or above average, with very low counts for ratings.
+
+## Problem 4: Beyond Two Variables (2 pts total)
+
+### Part a (Code: 1 pt)
+
+Update your scatterplot from Problem 2c to include your groups from Problem 3 in different colors. You should also have a separate regression line (or local regression curve) for each group.
+
+#### Solution
+
+```{r}
+#| label: Scatterplot 2
+
+ggplot(
+  data = RMP_train,
+  mapping = aes(
+    x = interest,
+    y = overall,
+    color = discipline
+  )
+) +
+  geom_point(alpha = 0.1) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    x = "Interest in Course",
+    y = "Overall Rating",
+    title = "Overall Rating vs Interest by Discipline"
+  )
+
+```
+
+### Part b (Explanation: 1 pt)
+
+Write 1-2 sentences describing anything interesting that you notice based on your scatterplot. Generally, you want to think about how (if) your answers to the questions from Problem 2 change depending on which group you look at.
+
+Again, try not to write with too much technical jargon.
+
+It's very likely that with over 17,000 professors, this gets very messy. If your scatterplot is just a blob, tell me that you can't see anything useful.
+
+#### Solution
+
+While it is just a blob, the regression line helps make it clear. My answers stay mostly the same for ratings, Humanities and Social Studies have the best ratings, Engineering has mostly the worst. Though, the whole interest in course thing is completely unreadable, for blob reasons of course.

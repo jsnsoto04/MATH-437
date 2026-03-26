@@ -1,0 +1,586 @@
+---
+title: "Exploratory Data Analysis: Worked Example"
+subtitle: "Math 437"
+format: html
+editor: source
+---
+
+## Introduction
+
+In this activity, we'll walk through the general thought process for exploratory data analysis and introduce some code for executing the steps. We'll investigate baseball player salaries from ~40 years ago using the `Hitters` dataset from the `ISLR2` package. In real exploratory data analysis, we often go back and forth between these steps as we refine our ideas about what exactly is being shown by our data.
+
+```{r}
+#| label: load packages
+
+library(ISLR2)
+library(tidyverse)
+library(rsample)
+```
+
+
+## Figuring Out What Is In Your Data
+
+The very first step in exploratory data analysis is to confirm that the data you imported looks exactly like the data you thought you imported. R will often make incorrect "guesses" about the variable types when there is a lot of missing data.
+
+The second step is to figure out what exactly is in your data. We want to know:
+
+- What does one row in this dataset represent? How many rows are there?
+  An observation here is a player
+- What does each variable in this dataset represent? Which variables are categorical and which are numerical? Are there any variables that don't neatly line up with this partition (e.g., dates)?
+  x
+- Which variable would be best to use as the response variable?
+  x
+- Are there any variables or sets of variables in the dataset that represent the same thing?
+  x
+- Are there any variables whose type in R does not match their type in the study/data dictionary?
+
+1. By looking at the dataset and investigating the data dictionary (`?Hitters`), answer the first three questions above.
+
+```{r}
+#| label: Glimpse
+
+glimpse(Hitters)     # from dplyr
+
+```
+
+
+## Split Your Data Before Exploring It
+
+If you plan to build a predictive model, then you should split your data into training and holdout sets *before* doing any actual analysis in R. The holdout set(s) is for model validation and/or testing; you should never even peek at the holdout set when doing exploratory analysis.
+
+The reason for this is that your exploratory data analysis is giving you *ideas* for what variables are important, how to deal with potential data issues, what kinds of models might be appropriate, etc. You don't want to "spoil" those ideas by "peeking" into the test set.
+
+Be careful when doing the splitting to ensure that information does not "leak" into the holdout set(s). For example, with time-stamped data, everything in the training set should have been observed earlier than anything in the holdout set(s). For another example, if two observations are clearly related (e.g., two divisions of the same company), the rows corresponding to both observations should go in one or the other set. 
+
+Since there is no obvious dependence in the `Hitters` data, we can use just a random 80%/20% split - 80% in the training set that we will look at, 20% in the holdout set.
+
+```{r}
+#| label: split training and test
+set.seed(105)
+
+Hitters_split <- initial_split(Hitters, prop = .8)
+Hitters_train <- training(Hitters_split)
+Hitters_test <- testing(Hitters_split)
+
+```
+
+## Explore by Asking Questions
+
+The overall goal of exploratory data analysis is to understand what in the data is **as expected** and what in the data is **unexpected**.
+
+The general procedure is as follows:
+
+1. Ask questions about the data and try to make guesses about what you expect the answer would be. It's okay to say, "I have no idea what to expect."
+2. Make graphs and summaries that may contribute toward understanding the answer.
+3. Determine what is expected and what is unexpected, based on those graphs and summaries. Think at both the distributional level and, if the dataset is not too big, at the level of individual data points.
+4. Ask follow-up questions to try to explain the unexpected.
+
+## Distribution of a Single Variable
+
+I typically find it best to start by investigating the distribution of the response variable.
+
+In this dataset, the response variable is numerical, which means that we should be able to describe its distribution in terms of center, variability, shape, and number/location of outliers.
+
+1. What do you *expect* the distribution of `Salary` (remember, on the log-10 scale) to look like? Why? (Remember, it's okay to say "I have no idea")
+
+We expect:
+* Some outliers
+* Fairly normal (after log transform)
+* Should expect lots of points "around" 5-6
+
+Now we can start summarizing and graphing the data to see whether we get what we expected.
+
+The chunk below to uses the `summarize` function in the `dplyr` package to obtain the number of total observations, number of missing observations, five-number summary, mean, and standard deviation for the response variable in the training set `Hitters_train`. The argument `na.rm = TRUE` ensures that I don't return `NA` if there is missing data.
+
+```{r}
+#| label: summarize variable with summarize
+
+Hitters_train |> 
+  summarize(
+    # each statistic is going on to its own line
+    n = n(),     # sample size
+    n_missing = sum(is.na(Salary)),
+    mean = mean(Salary, na.rm = TRUE),     # because I already know missing data
+    sd = sd(Salary, na.rm = TRUE),
+    min = min(Salary, na.rm = TRUE),
+    max() = max(Salary, na.rm = TRUE)
+  )
+
+```
+
+Shape and outliers, especially, are more easily identified graphically using a histogram. While there are a bunch of basic plotting commands in base R, the `ggplot2` package is so good that data scientists who program almost everything else in Python will work in R to make these visualizations. There are essentially 3 steps to working with this package:
+
+1. Set up the figure using `ggplot()` by defining the dataset you are working with and which variables in the dataset should be mapped to which aspects of the graph (x-axis, y-axis, color, etc.)
+2. Add (using `+`) the intended type of graph to your figure
+3. (Optional) Customize the figure
+
+For example, the code below creates a simple histogram of salaries:
+
+```{r}
+#| label: plot histogram of Salary
+
+ggplot(
+  data = Hitters_train,
+  mapping = aes(
+    x = Salary
+  )
+) +
+  geom_histogram(
+    center = 125,     # center of one bin
+    binwidth = 50,     # bin width
+    # one bin from 100 - 150
+  ) +
+  labs(
+    x = "Salary ($1000s/year)",
+    y = "Number of Players",
+    title = "1986 Major League Baseball"
+  )
+
+```
+
+Another common visualization of numerical data is a boxplot. For small datasets, I like to overlay the points on top of the box:
+
+```{r}
+#| label: boxplot with points overlaid
+
+ggplot(
+  data = Hitters_train,
+  mapping = aes(
+    y = Salary
+  )
+) +
+  geom_boxplot() +
+  geom_point(x = 0) +    # dot plot on top of the boxplot
+  coord_flip()     # flips to put x-axis on y-axis and vice versa
+
+```
+
+Notice that R gives me a warning message that the missing data was removed from the dataset before plotting.
+
+When we create our graphical and numerical summaries, we don't care about making anything look good - our graphs and summaries just need to be organized enough that *we* know how to interpret them. Generally I don't bother making the labels or colors perfect - just good enough that "next week me" can figure out what I graphed without too much effort. I do try to create and name new variables within the `summarize()` function, but that's mostly because I find it easier to read the shorthand column names than something like `quantile(Salary, 0.75, na.rm = TRUE)`.
+
+2. Did we see what we expected the distribution to look like, in general? If not, what was different?
+
+3. Is there anything unexpected? If so, what should we point out? 
+
+### Distribution of Categorical Variables
+
+For categorical variables, it doesn't make sense to get numerical summaries like mean and standard deviation. Instead, we want to look at which categories there are and how prevalent each category is in the dataset. 
+
+Let's look at the `League` variable as an example.
+
+1. Which categories do we expect to see?
+
+American and National
+
+2. What do we expect the distribution of categories would look like?
+
+50/50
+
+The chunk below gets the count of observations in each category. Note that an `NA` category will get its own row in the table.
+
+```{r}
+#| label: simple counts by category
+
+Hitters_train |>
+  group_by(League) |>
+  count()
+
+```
+
+Sometimes it is easier to show this in a bar graph than a table:
+
+```{r}
+#| label: simple bar graph
+
+ggplot(
+  data = Hitters_train,
+  mapping = aes(
+    x = League
+  )
+) +
+  geom_bar()
+
+```
+
+3. Did we get roughly what we expected? If not, what was unexpected?
+
+This example probably wasn't that unusual, but sometimes weird categories can pop up:
+
+```{r}
+#| label: Lahman database
+
+Lahman::Batting |>
+  group_by(lgID) |>
+  count()
+```
+
+This doesn't even match the documentation for the data! Our next step would be to figure out why we have so many leagues that don't even appear in the help file.
+
+(It turns out that this isn't a data problem at all; there's a *very* good reason for this, but it takes a little bit of additional exploration and a little bit of knowledge about baseball to figure out. Always *incorporate* your knowledge of the context of the data into your exploration.)
+
+## Relationships Between Variables
+
+The relevant summaries and plots we create to explore questions about relationships change depending on the types of variables we are looking at.
+
+We also start by looking at *bivariate* relationships before even considering more than two variables. Remember that when we explore, we start simple and build more complex, rather than starting complex and hoping we don't have to backtrack.
+
+### One Categorical, One Numerical
+
+Here we'll look at how the salary (numerical) varies by `League` (categorical).
+
+1. How do we expect the distribution of salary to change depending on whether we look in League A (AL) or League N (NL)?
+
+* People who don't know ball, we got no idea!!!
+
+We can combine the `group_by()` and `summarize()` functions to get a grouped summary of the response variable within each group:
+
+```{r}
+#| label: grouped summary
+
+Hitters_train |>
+  group_by(League) |>
+  summarize(
+    # each statistic is going on to its own line
+    n = n(),     # sample size
+    n_missing = sum(is.na(Salary)),     # still counts missing
+    mean = mean(Salary, na.rm = TRUE),     # because I already know missing data
+    sd = sd(Salary, na.rm = TRUE),
+  )
+
+```
+
+I like to visualize the distribution within each group by making a set of box plots and overlaying a dot plot on each box plot. We always start by mapping the x-axis to the categorical variable and the y-axis to the numerical variable, then tell R to flip the axes if the categorical variable is the response.
+
+```{r}
+#| label: grouped boxplots
+
+ggplot(
+  data = Hitters_train,
+  mapping = aes(
+    x = League,     # Categorical on x-axis
+    y = Salary,     # Numerical on x-axis
+    fill = League     # color the boxplots different colors
+  )
+) +
+  geom_boxplot() +
+  geom_point(
+    aes(color = League)     # Color just the point
+  ) +
+  scale_fill_manual(
+    values = c(A = "#BA0021", N = "dodgerblue")
+  ) +
+  scale_color_manual(
+    values = c(A = "navy", N = "beige")
+  )
+
+```
+
+If you insist on making histograms (for example, to check distribution shape), you want to use `facet_wrap`:
+
+```{r}
+#| label: grouped histograms
+
+ggplot(
+  data = Hitters_train,
+  mapping = aes(
+    x = Salary
+  )
+) +
+  geom_histogram(
+    center = 125,
+    binwidth = 50
+  ) +
+  facet_wrap(
+    vars(League)
+  )
+
+```
+
+2. Did we see what we expected, in general, when we compared the two groups? If not, what was different?
+
+3. Is there anything unexpected in our comparison of the two groups? If so, what should we point out? 
+
+4. Is there anything unexpected *within* one of the groups? If so, what should we point out?
+
+### Two Numerical
+
+Let's look at the relationship between salary and the number of home runs (`HmRun`).
+
+1. What do we expect should happen to salary as the number of home runs increases? Describe generally what you expect the trend to look like and how you expect the actual salaries to vary around that trend.
+
+We expect exponential growth for their salary
+
+For graphing relationships between numerical variables, we have the familiar scatterplot.
+
+```{r}
+#| label: scatterplot with geom_point
+
+ggplot(
+  data = Hitters_train,
+  mapping = aes(
+    x = HmRun,
+    y = Salary
+  )
+) +
+  geom_point(
+    color = "#BA0021"
+  ) +
+  geom_smooth(
+    method = "loess",
+    se = FALSE     # give me the trend, not the estimated variability around it
+  )
+
+```
+
+2. Is the trend as we expected? If not, what was different?
+
+Not as exponential, a dip, strange outliers for being bad dh
+
+3. Is the variation around that trend as we expected? If not, what was different?
+
+4. Are there outliers that influence our perception of the trend (i.e., "influential points")? Are there any players that have unusually high or low salaries compared to what the trend suggests? If so, what should we point out?
+
+We can also get the correlation between the two variables, but note that we should always start with the scatterplot to verify that the relationship is approximately linear. If the relationship is nonlinear or there are influential outliers, the correlation we get may be misleading.
+
+```{r}
+#| label: correlation with summarize
+
+Hitters_train |>
+  filter(HmRun == 0, Salary > 1750)
+
+# Outliers are due to incorrect data and bc Ozzie was goated shortstop
+
+```
+
+The `use` argument tells us to use all observations for which both variables have a value.
+
+```{r}
+#| label: weird outlier dudes
+
+```
+
+It turns out that there are actually two different reasons for these outliers.
+
+- Mike Schmidt actually led the National League with 37 home runs in 1986; the 0 home runs appears to be a misrecorded data point.
+- Ozzie Smith did actually hit 0 home runs in 1986, but most of his value came from defense - as an otherwise league-average hitter who is in the conversation for "greatest defensive player of all time", it makes sense why his salary was so high.
+
+Notice that we need to have some knowledge of our subject matter to make any sense of this - if we have no idea who Mike Schimdt and Ozzie Smith are, we should probably go investigate to figure out what's going on.
+
+### Two Categorical
+
+Here we'll look at the relationship between League (A or N) and Division (E or W).
+
+1. How do we expect the distribution of Division (E or W) will change depending on if we look at League A or League N?
+
+For categorical-categorical relationships, we should be used to a two-way table:
+
+```{r}
+#| label: two way table with xtabs
+
+xtabs(
+  ~ League + Division,     # if we have a count variable, it goes on left of ~
+  data = Hitters_train
+) |>
+  addmargins()
+
+```
+
+To display this table graphically, I like to use a standardized stacked bar plot, which is basically a set of pie charts that are "unrolled" to be placed on the same set of axes:
+
+```{r}
+#| label: unrolled pie chart
+
+ggplot(
+  data = Hitters_train,
+  mapping = aes(
+    x = League,     # which categorical variable on x-axis
+    fill = Division
+  )
+) +
+  geom_bar(
+    position = "fill"     # normalize the heights to all = 1
+  ) +
+  scale_fill_manual(
+    values = c(E = "gray4", W = "#BA0021")
+  )
+
+```
+
+This type of graph is great for seeing relationships as long as the `fill` variable is ordinal or doesn't have too many categories. Otherwise it gets a bit busy.
+
+A variant on this type of plot, the *mosaic plot*, sets the width of each bar proportion to the number of observations in each category (i.e., the marginal totals for the variable on the x-axis). Thus, the area of each rectangle is proportional to the number of observations in each cell of the table. If you are interested in mosaic plots, check out the `ggmosaic` package.
+
+2. Did we see what we expected, in general, when we compared the two groups? If not, what was different?
+
+3. Is there anything unexpected in our comparison of the two groups? If so, what should we point out? 
+
+4. Is there anything unexpected *within* one of the groups? If so, what should we point out?
+
+
+### Describing More Complex Relationships
+
+Plotting three or more variables on the same graph requires a bit of forethought, because each additional variable needs to be mapped to a different property of the plot (other than location along the x or y axes). 
+
+If we have two categorical variables, then we can use `facet_grid()` to make a small grid of plots:
+
+The most obvious one to use is color:
+
+```{r}
+#| label: doubly grouped histograms
+
+ggplot(
+  data = Hitters_train,
+  mapping = aes(
+    x = Salary
+  )
+) +
+  geom_histogram(
+    center = 125,
+    binwidth = 50
+  ) +
+  facet_grid(
+    rows = vars(Division),
+    cols = vars(League)
+  )
+
+
+```
+
+```{r}
+#| label: grouped boxplots in 2 columns
+
+ggplot(
+  data = Hitters,
+  mapping = aes(
+    x = Division,
+    y = Salary)
+) +
+  geom_boxplot() +
+  coord_flip() +
+  facet_grid(
+    rows = vars(League)
+  )
+
+```
+
+If we don't like the small plots, using color and/or shape is usually the best option.
+
+```{r}
+#| label: grouped boxplots with colored points
+
+ggplot(
+  data = Hitters,
+  mapping = aes(
+    x = League,
+    y = Salary
+  )
+) +
+  geom_boxplot() +
+  coord_flip() +
+  geom_point(
+   mapping = aes(
+     color = Division,
+     shape = Division
+   ) 
+  ) +
+  scale_color_manual(
+    values = c(E = "#BA0021", W = "dodgerblue")
+  ) +
+  scale_shape_manual(
+    values = c(E = 15, W = 19)
+  )
+  
+
+```
+
+```{r}
+#| label: scatterplot with color
+
+ggplot(
+  data = Hitters,
+  mapping = aes(
+    x = HmRun,
+    y = Salary,
+    color = League
+  )
+) +
+  geom_jitter( # jittered scatterplot
+    v = .1     # amount of vertical jitter
+    ) +
+  scale_color_manual(
+    values = c(A = "#BA0021", N = "dodgerblue")
+  )
+
+```
+
+One fun trick with `ggplot2` is to automatically add the least-squares regression line (at least over the support of the data):
+
+```{r}
+#| label: automatically add regression line
+
+ggplot(
+  data = Hitters,
+  mapping = aes(
+    x = HmRun,
+    y = Salary,
+    color = League
+  )
+) +
+  geom_point(
+    alpha = .2     # transparency
+    ) +
+  scale_color_manual(
+    values = c(A = "#BA0021", N = "dodgerblue")
+  ) +
+  geom_smooth(
+    method = "lm",
+    se = FALSE     # no 95% confidence bands
+  )
+
+```
+
+By default `ggplot2` will include a 95% confidence interval for the mean of the response along with the smoothing; `se = FALSE` says to just indicate the trend.
+
+There isn't much we can do in the way of tabular three-variable summaries, but we can put extra stuff in the `group_by` argument:
+
+```{r}
+#| label: add more stuff in group_by
+
+Hitters |>
+  group_by(
+    League, Division     # group first by league, then division
+  ) |>
+  
+  summarize(
+    n = n(),
+    mean = mean(Salary, na.rm = TRUE),
+    sd = sd(Salary, na.rm = TRUE)
+  )
+
+```
+
+Usually it doesn't make sense to explore much beyond 3 or 4 variables, because it starts getting hard to think about what you would expect to see.
+
+## Remember to Ask Follow-Up Questions
+
+Remember that our general process is:
+
+1. Ask questions about the data and guess the answers
+2. Make graphs and summaries
+3. Determine what is expected and what is unexpected
+4. Ask follow-up questions to try to explain the unexpected
+
+Almost always, you will find that some data wrangling is suggested (for example, combining groups or transforming a numerical variable) to better understand what is going on in your data. Make notes of what you've done so that you can modify the training (and test) data appropriately when you're ready to fit a model.
+
+## Exploratory Data Analysis Practice
+
+Pick one of the questions below and attempt to gain insight into the answer by following.
+
+- We expect players to hit a "prime" in the early-to-middle part of their career and then drop off later. Is this actually reflected in the 1986 stats? What about the 1987 salaries?
+- What kinds of players do you expect would have the highest salaries? Is this actually reflected in the data?
+- What kinds of players switched leagues prior to the 1987 season? 
+
+It turns out that you can go down some interesting rabbit holes with all of these questions by following up on what you see in your initial graphs and summaries.
+
+Note that actually writing the code to find your answer may be just outside your current capabilities; if you are having trouble getting an answer, first write pseudocode for how you would achieve it, then call me over to help you figure out the correct R syntax to do it.
