@@ -1,0 +1,32 @@
+---
+title: "Jason Soto"
+subtitle: "Actuarial Science Major"
+image: profile.jpg
+about: # https://quarto.org/docs/websites/website-about.html
+  template: trestles
+  links:
+    - icon: github
+      text: Github
+      href: https://github.com/jsnsoto04
+    - icon: linkedin
+      text: LinkedIn
+      href: https://www.linkedin.com/in/jason-soto-6562963aa/
+---
+
+Just a simple site for my Modern Approaches to Data Analysis course.
+
+“It's your life. Do what you want with it.”
+
+― Kentaro Miura
+
+## Education
+
+Western High School \| Anaheim, CA \| August 2018 - May 2022
+
+California State University, Fullerton \| Mathematics, Actuarial Science Concentration, B.A. \| August 2022 - May 2027
+
+## Experience
+
+Jack in the Box \| Cashier \| May 2022 - August 2022
+
+Knott's Berry Farm \| Games Attendant \| February 2023 - March 2026
