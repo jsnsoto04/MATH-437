@@ -2,10 +2,9 @@
 title: Final Project
 ---
 
-Here you will find my final project.
-
-There is no final project yet.
+This page will contain my Math 437
+final project.
 
 "You can’t gain anything without losing something first."
 
-- Hiromu Arakawa
+Hiromu Arakawa
