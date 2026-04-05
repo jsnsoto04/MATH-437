@@ -11,7 +11,7 @@ website:
     title: Jason Soto
     right:
       - text: Home
-        href: /
+        href: index.qmd
       - href: final_project.qmd 
         text: Final Project
     tools:
