@@ -1,9 +1,23 @@
 [
   {
-    "objectID": "final_project.html",
-    "href": "final_project.html",
-    "title": "Final Project",
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "Jason Soto",
     "section": "",
-    "text": "This page will contain my Math 437 final project.\n“You can’t gain anything without losing something first.”\nHiromu Arakawa"
+    "text": "Just a simple site for my Modern Approaches to Data Analysis course.\n“It’s your life. Do what you want with it.”\n― Kentaro Miura"
+  },
+  {
+    "objectID": "index.html#education",
+    "href": "index.html#education",
+    "title": "Jason Soto",
+    "section": "Education",
+    "text": "Education\nWestern High School | Anaheim, CA | August 2018 - May 2022\nCalifornia State University, Fullerton | Mathematics, Actuarial Science Concentration, B.A. | August 2022 - May 2027"
+  },
+  {
+    "objectID": "index.html#experience",
+    "href": "index.html#experience",
+    "title": "Jason Soto",
+    "section": "Experience",
+    "text": "Experience\nJack in the Box | Cashier | May 2022 - August 2022\nKnott’s Berry Farm | Games Attendant | February 2023 - March 2026"
   }
 ]
