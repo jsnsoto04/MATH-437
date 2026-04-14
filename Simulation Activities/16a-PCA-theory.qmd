@@ -1,0 +1,215 @@
+---
+title: "Simulation Activity: Principal Component Analysis"
+subtitle: "Math 437"
+format: html
+editor: source
+---
+
+```{r}
+#| label: load packages
+#| message: false
+#| warning: false
+
+library(LearnPCA)
+library(Lahman)
+library(tidymodels)
+```
+
+
+## The Revenge of Math 307
+
+Facts and theorems that either we encountered in Math 307 or depend on terms we learned in Math 307:
+
+- A real square matrix A is orthogonal if $A^T A = A A^T = I$.
+- Two matrices A and B are *orthogonally equivalent* if there exists an orthogonal matrix $P$ such that $A = P^T B P$.
+- A real $p \times p$ matrix A is symmetric iff A is orthogonally equivalent to a real diagonal matrix.
+- Covariance and correlation matrices are real symmetric $p \times p$ matrices.
+
+The result of these facts and theorems is that *any* covariance or correlation matrix can be written in the form $P^T D P$, where $P$ is an orthogonal $p \times p$ matrix and $D$ is a real diagonal matrix.
+
+The following theorems are presented without proof, but critical for understanding Principal Component Analysis.
+
+1. The diagonal entries of $D$ are the eigenvalues of the covariance matrix $\Sigma$ and are non-negative.
+2. The columns of $P$ are the eigenvectors of $\Sigma$.
+3. The transformation $X' = P^T X$ transforms the standard ordered basis $\{x_1, x_2, \ldots, x_p\}$ to a new ordered basis $\{x_1', x_2', \ldots, x_p'\}$.
+
+
+```{r}
+#|label: simulated data 
+
+set.seed(109)
+a1 <- rnorm(1000)
+a2 <- rnorm(1000)
+simdata <- data.frame(
+  x1 = 2*a1 - a2,
+  x2 = a1 + a2
+)
+
+plot(x2 ~ x1, data = simdata)
+
+```
+
+```{r}
+#| label: covariance matrix
+
+cov_matrix <- cov(simdata)
+cov_matrix
+
+```
+
+```{r}
+#| label: eigenvalues of covariance matrix
+
+eigen(cov_matrix)
+
+```
+
+Notice that the eigenvectors form an *ordered* basis where the order matches the eigenvalues in *descending* order.
+
+Is P orthogonal?
+
+```{r}
+#| label: orthogonality
+
+D <- diag(eigen(cov_matrix)$values)
+P <- eigen(cov_matrix)$vectors
+
+apply(P, 2, function(x) sqrt(sum(x^2)))     # check that columns have norm 1
+
+solve(P)     # P^-1
+t(P)     # P^T
+
+```
+
+The columns of P have norm 1 and (at least to the precision that we are displaying) $P^T$ and $P^{-1}$ are equivalent. So $P$ is orthogonal.
+
+Note that the `eigen()` function defines the `$vectors` matrix $P$ such that $D = P^T A P$, and so to reconstruct the covariance matrix:
+
+```{r}
+#| label: reconstruct covariance matrix
+# reconstruct using P D P^T
+P %*% D %*% t(P)
+cov_matrix
+
+```
+
+We can thus create the vector $(x_1', x_2')$ such that 
+
+$$
+x_1' = P[1,1] x_1 + P[1,2] x_2
+$$
+
+and
+
+$$
+x_2' = P[2,1] x_1 + P[2,2] x_2
+$$
+
+This gets a bit tricky in the code because $(x_1, x_2)$ is represented as a row vector:
+
+```{r}
+#| label: convert x to x'
+
+simdata2 <- as.matrix(simdata) %*% P
+plot(simdata2[,1], simdata2[,2], xlab = "x1'", ylab = "x2'")
+
+```
+
+```{r}
+#| label: check covariance now
+
+cov(simdata2)
+
+```
+
+1. What do you notice about this graph of `simdata2` compared to the original graph of `simdata`?
+
+### Why Does This Matter?
+
+```{r}
+#| label: total variation
+
+x1_var <- var(simdata$x1)
+x2_var <- var(simdata$x2)
+total_var1 <- x1_var + x2_var
+# really should be sum of squares but the 1/(n-1) is just factored out
+
+x1_prime_var <- var(simdata2[,1])
+x2_prime_var <- var(simdata2[,2])
+total_var2 <- x1_prime_var + x2_prime_var
+
+c(total_var1, total_var2)
+
+```
+
+Notice that the total amount of variance in the data is the same whether we choose (x1, x2) or (x1', x2') as our basis. But:
+
+```{r}
+#| label: proportion of variance
+
+c(x1_var, x2_var)/total_var1
+c(x1_prime_var, x2_prime_var)/total_var2
+
+```
+
+By rotating our basis to (x1', x2'), we can maximize the proportion of variance attributed to variation along the direction defined by the first vector in our ordered basis. 
+
+Moreover, we can exactly reconstruct these maximized proportions by normalizing the *eigenvalues* so that they sum to 1:
+
+```{r}
+#| label: normalize the eigenvalues
+
+D/sum(D)     # diagonal matrix with % variation on diagonal
+
+```
+
+The `LearnPCA` package has a nice visualization of this rotation:
+
+```{r}
+#| label: LearnPCA visual of the basis rotation
+
+# comment this out if it doesn't work or if you want to render later
+LearnPCA::PCsearch()
+```
+
+Note that each of the vectors in the new ordered basis is a linear combination of $x_1, x_2, \ldots, x_p$. So PCA does **NOT** perform variable selection. What it *does* do is change the basis to more effectively partition the "signal" vs. "noise" when dealing with  highly (positively or negatively) correlated variables. 
+
+## Dimensionality Reduction
+
+The advantage of this partition is that lower-indexed eigenvectors in the basis represent interpretable "signals" and higher-indexed eigenvectors represent uninterpretable "noise." Therefore, we can get rid of the eigenvectors that we believe entirely describe the "noise", reducing the dimensionality of our predictor space.
+
+For example, suppose that we wanted to project our simulated (x1, x2) data into one-dimensional space. If we tried to do this with just x1:
+
+```{r}
+#| label: attempt to reconstruct from x1 and x2
+z <- simdata[,1] # only the first column
+
+par(mfcol = c(1,2))
+plot(simdata$x1, z, xlab = "real x1", ylab = "reconstituted x1",
+     main = paste0("Correlation: ", round(cor(simdata$x1, z), 3)))
+abline(a = 0, b = 1, col = "red")
+plot(simdata$x2, z, xlab = "real x2a", ylab = "reconstituted x2a",
+     main = paste0("Correlation: ", round(cor(simdata$x2, z), 3)))
+abline(a = 0, b = 1, col = "red")
+```
+
+We have preserved all information about `x1` but lost a ton of information about `x2`. On the other hand, if we use the direction specified by the first eigenvector in our ordered basis:
+
+```{r}
+#| label: reconstruct based on x1 prime
+
+z <- simdata2[,1] # only the first column
+P1 <- P[,1] # only the first column of the transformation
+
+reconstituted <- z %*% t(P1)
+
+par(mfcol = c(1,2))
+plot(simdata$x1, reconstituted[,1], xlab = "real x1", ylab = "reconstituted x1",
+     main = paste0("Correlation: ", round(cor(simdata$x1, reconstituted[,1]), 3)))
+abline(a = 0, b = 1, col = "red")
+plot(simdata$x2, reconstituted[,2], xlab = "real x2", ylab = "reconstituted x2",
+     main = paste0("Correlation: ", round(cor(simdata$x2, reconstituted[,2]), 3)))
+abline(a = 0, b = 1, col = "red")
+```
+
+We can see that we are still doing a very good job of preserving the information contained in `x1`, while doing a much-less-awful job of preserving the information contained in `x2`.

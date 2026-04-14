@@ -1,0 +1,388 @@
+---
+title: "Simulation Activity: Missing Data Imputation"
+subtitle: "Math 437"
+format: pdf
+editor: source
+---
+
+```{r}
+library(tidyverse)
+library(mvtnorm) # simulate multivariate normal data
+library(tidymodels) # for linear simple imputation
+library(naniar) # for visualizing and summarizing missing data
+library(softImpute) # iterative single imputation
+library(mice) # multiple imputation
+
+```
+
+## Data
+
+We're going to simulate data from a multivariate normal distribution with highly correlated variables:
+
+```{r}
+#| label: mu and sigma
+
+mu <- c(4.96, 3.76, 3.02, 1.26, 5.59, 4.77, 1.83)
+
+Sigma <- diag(c(11.94, 6.54, 5.99, 2.85, 16.79, 11.73, 6.68))
+Sigma[lower.tri(Sigma)] <- c(
+  6.08, 6.16, 2.82, 12.80, 10.01, 3.41, 
+  3.63, 1.49, 8.32, 6.19, 1.94,
+  1.87, 7.40, 6.33, 2.27, 3.64, 3.12, 1.07,
+  11.68, 4.04, 3.68
+)
+Sigma <- Sigma + t(Sigma) - diag(diag(Sigma))
+
+set.seed(437)
+fake_data <- rmvnorm(n = 100, mean = mu, sigma = Sigma)
+
+```
+
+The basic conceit here is that we have 100 incomplete skeletons. Let's remove roughly 25% of the data. We'll also make it so that the "smaller bones" are more likely to be missing.
+
+Note that we're actually removing less than 25%, because we have duplicate "missingness" in the code below.
+
+```{r}
+#| label: randomly remove data
+set.seed(116)
+missing_rows <- sample(1:100, size = 175, replace = TRUE)
+missing_cols <- sample(1:7, size = 175, replace = TRUE, prob = 1/mu)
+
+fake_missing_data <- fake_data
+
+for(i in seq_along(missing_rows)){
+    fake_missing_data[missing_rows[i], missing_cols[i]] <- NA_real_
+}
+```
+
+
+```{r}
+#| label: fake missing data frame
+
+bones_df <- data.frame(fake_missing_data)
+names(bones_df) <- paste("bone", 1:7, sep = "_")
+bones_df
+
+```
+
+We are going to explore a few different methods for dealing with this missingness. This is by no means comprehensive, and we're going to skip over a few common methods that we may not have the background to understand yet.
+
+Typically, in predictive modeling, single imputation methods are applied to the training set, and the results applied to the test set. In inferential modeling, a test set is often not used, and multiple imputation methods create multiple "copies" of the dataset to use for inference.
+
+The `recipes` package in `tidymodels` includes a number of single imputation procedures, so we'll explore single imputation with `tidymodels`. For iterative single imputation, we'll look at the `softImpute` package that contains the algorithm used by the textbook. For multiple imputation, we'll look at the `mice` package that is one of the standard packages in R for dealing with missing data.
+
+## Visualizing the Missingness
+
+We can plot the pattern of missingness:
+
+```{r}
+#| label: plot missingness
+
+vis_miss(bones_df)     # default row and column order
+
+vis_miss(bones_df, sort_miss = TRUE)     # orders the columns from most to least missing data
+
+vis_miss(bones_df, cluster = TRUE)     # reorder the rows so obs. of similar patterns of missingness are grouped
+
+```
+
+Note that when we have a lot of observations and/or a lot of variables to look at, this may not be super-informative or easy to plot. The help file for `vis_miss` suggests to take a random sample of 1000 (or fewer) rows, and potentially a smaller subset of variables, if this becomes unwieldy.
+
+We can also look at the missingness by variable in a table:
+
+```{r}
+#| label: missingness by variable
+
+miss_var_summary(bones_df)
+
+```
+
+An "upset" plot helps us see which sets of variables tend to be missing together:
+
+```{r}
+#| label: visualize combinations of missingness
+#| warning: false
+
+# warning due to outdated use of element_line()
+
+gg_miss_upset(bones_df, nsets = 7)
+
+```
+
+1. How do we read this figure? What does it tell us about common patterns of missingness?
+
+Bottom left tells us amt of bones missing. The dots say these are the bones that are missing in some amount rows
+
+## Mean/Median/Mode Imputation
+
+The simplest method is to replace the missing values with the average (or median) non-missing value in the training set. This method is called mean (or median) imputation.
+
+```{r}
+#| label: split training-test
+
+set.seed(395)
+bones_split <- initial_split(bones_df, prop = 0.80) 
+
+bones_train <- training(bones_split)
+bones_test <- testing(bones_split)
+
+```
+
+```{r}
+#| label: mean imputation
+
+mean_imputation <- recipe(
+  ~ bone_1 + bone_2 + bone_3 + bone_4 + bone_5 + bone_6 + bone_7,
+  data = bones_train
+) |>
+  step_impute_mean(all_numeric_predictors())
+
+mean_imputation_prep <- prep(mean_imputation)
+
+mean_imputation_prep
+
+```
+
+```{r}
+#| label: bake mean imputation
+
+mean_imputation_prep |>
+  bake(new_data = NULL)
+
+mean_imputation_prep |>
+  bake(new_data = bones_test)
+
+```
+
+1. What is being imputed for the missing values of `bone_4`?
+
+The mean in just that column, no other predictor matters
+Test imputes based off the train set
+
+2. Why do we impute the same value for the training and test sets?
+
+
+
+To impute the median instead, we use `step_impute_median()`. For categorical data, the equivalent is to replace the missing values with the most common non-missing value in the training set (mode imputation). The function is, intuitively, `step_impute_mode()`.
+
+### Why Not to Use Mean/Median/Mode Imputation
+
+```{r}
+#| label: why not to use this imputation
+ggplot(bones_train,
+       aes(x = bone_1,
+           y = bone_4)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE)
+
+mean_imputed_train <- mean_imputation_prep |>
+  bake(new_data = NULL)
+
+
+ggplot(mean_imputed_train,
+       aes(x = bone_1,
+           y = bone_4)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE)
+```
+
+
+1. What do you notice about the difference in the scatterplots with the missing data removed vs. the missing data imputed using mean imputation? How do you think this would affect the correlation and covariance matrices compared to the "true" one?
+
+First one is with missing data, it is biased. The second, missing data imputed using mean imputation biases downward any correlation between variables. Or something.
+
+## Single Imputation Using Supervised Learning Models
+
+The idea behind single imputation using supervised learning models is that we can consider the rows with observed values for a variable as a natural "training set" and rows with missing values as a natural "test set." We fit a model using the "observed" information and then replace the "missing" information with whatever the model predicts. There are three generally accepted supervised learning model types to use for single imputation:
+
+1. Linear (or logistic, or multinomial logistic) regression
+2. k-nearest neighbors
+3. (ensembles of) decision trees
+
+Here we'll illustrate single imputation using linear regression, since we haven't covered the other two methods yet.
+
+### Linear Model Imputation
+
+```{r}
+#| label: impute with lm
+
+linear_imputation <- recipe(
+  ~ bone_1 + bone_2 + bone_3 + bone_4 + bone_5 + bone_6 + bone_7,
+  data = bones_train
+) |>
+  step_impute_linear(
+    bone_1,     # variable to impute data for
+    impute_with = imp_vars(bone_5, bone_6)
+  )
+
+linear_imputation |>
+  prep() |> bake(new_data = NULL)
+
+linear_imputation |>
+  prep() |> bake(new_data = bones_test)
+
+```
+
+1. What is this warning? Why did we get imputed values of `bone_1` in our test set but not our training set?
+
+Sometimes having spaces and other weird symbols in variable names can cause issues with `step_linear_impute`; I haven't figured out how to solve this yet other than by fixing the names using something like `clean_names()` in the `janitor` package. 
+
+## Iterative Single Imputation Methods
+
+Iterative single imputation methods include the Expectation-Maximization Algorithm and the Matrix Completion algorithm introduced in Section 12.3. The idea is to minimize an objective function iteratively and choose the imputed values as those obtained at convergence.
+
+We'll work with the entire `bones_df` data frame in this section:
+
+### Matrix Completion with softImpute
+
+To use softImpute, we first have to convert our data from a data frame into a numeric matrix with NAs. Unfortunately, our `model.matrix` trick will not work as `model.matrix` removes missing data. So we will use `data.matrix` instead:
+
+```{r}
+#| label: softImpute prep
+
+bones_matrix <- data.matrix(bones_df)
+
+head(bones_matrix, 10)
+
+```
+
+Somewhat confusingly, the `softImpute` function with the defaults actually uses the "Hard-Impute" algorithm:
+
+```{r}
+#| label: softImpute function
+
+bones_softimpute <- softImpute(bones_matrix,
+                               type = "svd")
+
+```
+
+To get the imputed values, we can use `complete`:
+
+```{r}
+#| label: complete the matrix now
+
+bones_matrix_completed <- bones_matrix |>   
+  softImpute::complete(bones_softimpute)     # SVD used for the imputation
+
+head(bones_matrix_completed, 10)
+
+```
+
+### Checking Quality of Imputation
+
+```{r}
+#| label: check quality of softImpute imputation
+imputed_values <- data.frame(
+  bone = rep(colnames(bones_matrix), apply(bones_matrix, 2, \(x) sum(is.na(x)))), # missing variables, repeated as many times as missing
+  matrix_completion = bones_matrix_completed[is.na(bones_matrix)] # will turn the matrix into a vector of length n*p by concatenating the columns 
+)
+
+ggplot(
+  data = imputed_values,
+  mapping = aes(x = matrix_completion, fill = bone)
+  ) +
+  labs(x = "Imputed Values") +
+  geom_histogram(center = 5, binwidth = 1) +
+    facet_wrap(vars(bone), scales = "free") +
+  theme(legend.position = "none")
+
+```
+
+Checking for implausibly imputed values is critical before doing any inference/prediction. If we see implausible values, then either we should use a different imputation technique, or perhaps we should instead transform the (non-missing) data before imputation. Here we see that there is a potential issue with in that some of the values appear to be negative, but we also simulated some negative values.
+
+```{r}
+#| label: check combinations of missingness
+ggplot() +
+  geom_point(
+    data = as_tibble(bones_matrix_completed),
+    mapping = aes(x = bone_5, y = bone_6),
+    color = "red"
+  ) +
+    geom_miss_point(
+    data = bones_df,
+    mapping = aes(x = bone_5, y = bone_6)
+  )
+```
+
+The pink-ish points on the far left/bottom indicate that a value of one variable is available but the value of the other variable is missing. The pink-ish points in the very bottom left indicate that both variables have missing values. 
+
+Here I'm using the trick of "hiding" points by plotting points on top of them - I'm actually plotting the entire `bones_matrix_completed` in red, but because I then add a layer using the original `bones_df` data, all of the red points corresponding to the "original" values are hidden, leaving only the imputed values to show up in red.
+
+## Multiple Imputation
+
+We will use the `mice` package to do the multiple imputation. The difference here is that we get *multiple* estimates of the missing values, rather than a single estimate.
+
+### Predictive Mean Matching
+
+The idea behind predictive mean matching is to predict the variable whose value is missing from other predictors and randomly pick the imputed value from the observations whose predicted values are "closest" to the predicted value of the missing data point.
+
+The `mice` package will do this `m` times:
+
+```{r}
+#| label: predictive mean matching
+bones_pmm <- mice(
+  bones_train,
+  m = 5, # 5 times is the default,
+  seed = 215, # set a seed for reproducibility of the imputation
+  method = "pmm"
+)
+```
+
+Newer versions of `mice` can deal with spaces, but older versions can't, so you might need the `clean_names` function again.
+
+```{r}
+#| label: plot summaries of iterations
+plot(bones_pmm)
+```
+
+Now we can get the imputed datasets:
+
+```{r}
+#| label: get imputed data
+bones_pmm_imputed <- bones_pmm |>
+  mice::complete(action = "long")
+
+bind_rows(
+  head(bones_pmm_imputed, 3),
+  tail(bones_pmm_imputed, 3)
+)
+```
+
+We can now look at the distributions including the completed values:
+
+```{r}
+#| label: plot imputed data
+bones_pmm_imputed2 <- bones_pmm_imputed |>
+  mutate(
+    missing = rep(is.na(bones_train$bone_1), 5)
+  )
+ggplot(bones_pmm_imputed2,
+       aes(x = bone_1, fill = missing)) +
+  geom_histogram(center = 5, binwidth = 1) +
+  facet_wrap(~.imp) +
+  scale_fill_manual(values = c("blue", "red"),
+                    labels = c("observed", "imputed"))
+```
+
+### Inference with `mice`
+
+Typically we are doing multiple imputation to allow us to perform statistical inference despite the missing data. For example, we can fit a linear regression model on each of the multiply imputed datasets.
+
+```{r}
+#| label: fit lm with imputed data
+# have to run it this way because bones_pmm is a list
+bones_lm <- with(bones_pmm,
+                lm(bone_1 ~ bone_2 + bone_3 + bone_4)
+)
+
+bones_lm
+```
+
+We then *pool* the models together and obtain the relevant estimates and p-values:
+
+```{r}
+#| label: pool the lms
+bones_pooled <- mice::pool(bones_lm)
+
+bones_pooled |> summary()
+```

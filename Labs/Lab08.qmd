@@ -1,0 +1,516 @@
+---
+title: "Lab Assignment #8"
+author: "Math 437 - Modern Data Analysis"
+format: pdf
+editor: source
+---
+
+```{r}
+#| label: do this at the beginning of every lab file
+#| message: false
+#| warning: false
+here::i_am("Labs/Lab08.qmd")
+
+library(ISLR2)
+library(tidyverse)
+library(broom)
+library(recipes) # don't need the rest of tidymodels
+library(naniar)
+library(softImpute)
+
+cereal3 <- readr::read_csv(here::here("Data/cereal3.csv"))
+```
+
+This lab assignment is worth a total of **15 points**.
+
+## Problem 1: Principal Components Analysis
+
+### Part a (Code: 1 pt)
+
+Run the code in ISLR Lab 12.5.1. 
+
+#### Solution
+
+```{r}
+#| label: 12.5.1 Chunk 1
+
+states <- row.names(USArrests)
+states
+
+names(USArrests)
+
+```
+
+```{r}
+#| label: 12.5.1 Chunk 2
+
+apply(USArrests, 2, mean)
+
+```
+
+```{r}
+#| label: 12.5.1 Chunk 3
+
+pr.out <- prcomp(USArrests, scale = TRUE)
+
+names(pr.out)
+
+```
+
+```{r}
+#| label: 12.5.1 Chunk 4
+
+pr.out$center
+pr.out$scale
+pr.out$rotation
+
+```
+
+```{r}
+#| label: 12.5.1 Chunk 5
+
+dim(pr.out$x)
+
+```
+
+```{r}
+#| label: 12.5.1 Chunk 6
+
+biplot(pr.out, scale = 0)
+
+```
+
+```{r}
+#| label: 12.5.1 Chunk 7
+
+pr.out$rotation = -pr.out$rotation
+pr.out$x = -pr.out$x
+biplot(pr.out, scale = 0)
+
+```
+
+```{r}
+#| label: 12.5.1 Chunk 8
+
+pr.out$sdev
+
+```
+
+```{r}
+#| label: 12.5.1 Chunk 9
+
+pr.var <- pr.out$sdev^2
+pr.var
+
+```
+
+```{r}
+#| label: 12.5.1 Chunk 10
+
+pve <- pr.var / sum(pr.var)
+pve
+
+```
+
+```{r}
+#| label: 12.5.1 Chunk 11
+
+par(mfrow = c(1, 2))
+
+plot(pve,
+     xlab = "Principal Component",
+     ylab = "Proportion of Variance Explained",
+     ylim = c(0, 1),
+     type = "b")
+
+plot(cumsum(pve),
+     xlab = "Principal Component",
+     ylab = "Cumulative Proportion of Variance Explained",
+     ylim = c(0, 1),
+     type = "b")
+
+```
+
+```{r}
+#| label: 12.5.1 Chunk 12
+
+a <- c(1, 2, 8, -3)
+cumsum(a)
+
+```
+
+### Part b (Code: 1 pt)
+
+The `cereal3` dataset contains nutrition and price information for 88 breakfast cereals that existed in 2019.
+
+Using the `cereal3` dataset, create a new dataset called `cereal` that only contains the following variables:
+
+* `Total.Fat`
+* `Dietary.Fiber`
+* `Sugar`
+* `Protein`
+* `Sodium`
+* `Complex.Carbs`, which represents the carbohydrates that aren't dietary fiber or sugar
+
+#### Solution
+
+```{r}
+
+cereal3$Complex.Carbs <- cereal3$Total.Carbohydrate - cereal3$Dietary.Fiber - cereal3$Sugar
+
+cereal <- cereal3 |>
+  select(
+    Total.Fat, Dietary.Fiber, Sugar, Protein, Sodium, Complex.Carbs
+  )
+
+```
+
+
+### Part c (Code: 1 pt)
+
+Perform principal component analysis on the `cereal` dataset. You can use either the "base R" or "tidymodels" version of PCA. Remember to center and scale the data (either using the arguments `center = TRUE, scale = TRUE` in `prcomp` or using `step_normalize` before you do `step_pca`). 
+
+#### Solution
+
+```{r}
+#| label: PCA
+
+cereal_recipe <- recipe(
+  ~ ., data = cereal
+) |>
+  step_normalize(all_numeric_predictors()) |>     # normalizes, converts to z-scores
+  step_pca(all_predictors(), num_comp = 6)
+
+cereal_prep <- prep(cereal_recipe)
+
+cereal_baked <- cereal_prep |>
+  bake(new_data = NULL)     # bake on the training set, no new data
+
+cereal_tidy <- tidy(cereal_prep,
+                 2,     # step 2 - PCA
+                 type = "coef"     # extract loadings
+                 )
+
+head(cereal_tidy)
+
+```
+
+
+### Part d (Code: 2 pts; Explanation: 1 pt)
+
+Find the proportion of variance explained by each component and the cumulative proportion of variance explained. Produce a scree plot showing either the proportion of variance explained or the cumulative proportion of variance explained. Suggest an appropriate number of principal components to use to visualize or interpret the data and justify your decision based on the scree plot.
+
+#### Solution
+
+```{r}
+
+#| label: Proportion of Variance
+
+cereal_pve <- tidy(
+  cereal_prep,
+  2,
+  type = "variance"
+)
+
+cereal_pve
+
+ggplot(
+  data = cereal_pve |> filter(terms == "cumulative percent variance"),
+  aes(x = component, y = value)
+) +
+  geom_point() +
+  geom_line() +
+  labs(
+    x = "Principal Component",
+    y = "Cumulative Proportion of Variance Explained"
+  )
+
+```
+The cumulative scree plot shows how total variance increases as more principal components are included. The point where the curve begins to flatten shows that additional components contribute little additional variance.
+
+### Part e (Code: 0.5 pts)
+
+Produce a biplot showing the first two principal components.
+
+#### Solution
+
+```{r}
+#| label: biplot on separate graphs
+
+ggplot(
+  data = cereal_baked,
+  aes(x = PC1, y = PC2)) +
+  geom_point() +
+  labs(
+    title = "Principal Component Scores",
+       x = "PC1",
+       y = "PC2")
+
+
+cereal_loadings <- cereal_tidy |>
+  pivot_wider(
+    names_from = component,
+    values_from = value
+  ) |>
+  dplyr::select(!id)
+
+
+ggplot(
+    data = cereal_loadings) +
+  geom_segment(aes(
+    x = 0, y = 0,
+    xend = PC1, yend = PC2
+  ),
+  arrow = arrow(type = "open")
+  ) +
+  geom_text(
+    aes(x = PC1,
+        y = PC2,
+        label = terms),
+    check_overlap = TRUE
+) +
+  labs(
+    title = "Principal Component Loadings",
+     x = "PC1",
+     y = "PC2")
+
+```
+
+### Part f (Explanation: 2 pts)
+
+Give a word or short phrase describing what you think `PC1` represents about the cereals. Similarly, what do you think `PC2` represents? Explain your reasoning based on the biplot and/or the loadings matrix `rotation`.
+
+#### Solution
+
+PC1 may represent more high-protein and high-fiber cereals. We can deduce this as the protein, dietary fiber, and the complex carbs variables have the largest positive loadings. So PC1 is like old people cereal and stuff.
+
+PC2 represents cereals that are higher in sugar and fat versus cereals that are lower in sugar and fat. We can deduce as the variables with the largest absolute values, sugar and total fat have the biggest loadings. So PC2 is more about differences in sugar and fat content.
+
+## Problem 2: Missing Data
+
+### Part a (Code: 1 pt)
+
+Run the code in ISLR Lab 12.5.2. 
+
+#### Solution
+
+```{r}
+#| label: 12.5.2 Chunk 1
+
+X <- data.matrix(scale(USArrests))
+pcob <- prcomp(X)
+summary(pcob)
+
+```
+
+```{r}
+#| label: 12.5.2 Chunk 2
+
+sX <- svd(X)
+
+names(sX)
+
+round(sX$v, 3)
+
+```
+
+```{r}
+#| label: 12.5.2 Chunk 3
+
+pcob$rotation
+
+```
+
+```{r}
+#| label: 12.5.2 Chunk 4
+
+t(sX$d * t(sX$u))
+
+pcob$x
+
+```
+
+```{r}
+#| label: 12.5.2 Chunk 5
+
+nomit <- 20
+set.seed(15)
+
+ina <- sample(seq(50), nomit)
+inb <- sample(1:4, nomit, replace = TRUE)
+
+Xna <- X
+
+index.na <- cbind(ina, inb)
+
+Xna[index.na] <- NA
+
+```
+
+```{r}
+#| label: 12.5.2 Chunk 6
+
+fit.svd <- function(X, M = 1) {
+svdob <- svd(X)
+with(svdob,
+     u[, 1:M, drop = FALSE] %*% (d[1:M] * t(v[, 1:M, drop = FALSE]))
+     )
+}
+
+```
+
+```{r}
+#| label: 12.5.2 Chunk 7
+
+Xhat <- Xna
+
+xbar <- colMeans(Xna, na.rm = TRUE)
+
+Xhat[index.na] <- xbar[inb]
+
+```
+
+```{r}
+#| label: 12.5.2 Chunk 8
+
+thresh <- 1e-7
+
+rel_err <- 1
+
+iter <- 0
+
+ismiss <- is.na(Xna)
+
+mssold <- mean((scale(Xna, xbar, FALSE)[!ismiss])^2)
+
+mss0 <- mean(Xna[!ismiss]^2)
+
+```
+
+```{r}
+#| label: 12.5.2 Chunk 9
+
+while(rel_err > thresh) {
+  iter <- iter + 1
+  # Step 2(a)
+  Xapp <- fit.svd(Xhat, M = 1)
+  # Step 2(b)
+  Xhat[ismiss] <- Xapp[ismiss]
+  # Step 2(c)
+  mss <- mean(((Xna - Xapp)[!ismiss])^2)
+  rel_err <- (mssold - mss) / mss0
+  mssold <- mss
+  cat("Iter:", iter, "MSS:", mss,
+      "Rel. Err:", rel_err, "\n")
+  }
+
+```
+
+```{r}
+#| label: 12.5.2 Chunk 10
+
+cor(Xapp[ismiss], X[ismiss])
+
+```
+
+### Part b (Code: 1 pt)
+
+Adapt the code in ISLR Lab 12.5.2 to create a new data frame, `cereal_na_df`, which is exactly the same as the `cereal` data frame but missing 40 randomly removed data values. Each row should have at most one missing value.
+
+#### Solution
+
+Complete the code in this chunk to create `cereal_na_df`:
+
+```{r}
+#| label: cereal_missing
+
+cereal_missing <- data.matrix(scale(cereal))
+
+# Remove 40 values at random from cereal_missing 
+set.seed(67)
+missing_rows <- sample(1:nrow(cereal_missing), size = 40, replace = FALSE)
+missing_cols <- sample(1:ncol(cereal_missing), size = 40, replace = TRUE)
+
+cereal_na <- cereal_missing
+
+# This assigns missing value
+for(i in seq_along(missing_rows)){
+  cereal_na[missing_rows[i], missing_cols[i]] <- NA
+}
+
+# Store the new matrix as cereal_na_df?
+cereal_na_df <- as.data.frame(cereal_na)
+
+```
+
+
+### Part c (Code: 1 pt)
+
+Produce a visualization showing the distribution of the missingness in `cereal_na_df`.
+
+#### Solution
+
+```{r}
+#| label: Visualization
+
+# default row and column order
+vis_miss(cereal_na_df)
+
+# orders the columns from most to least missing data
+vis_miss(cereal_na_df, sort_miss = TRUE)
+
+# reorder the rows so obs. of similar patterns of missingness are grouped
+vis_miss(cereal_na_df, cluster = TRUE)
+
+gg_miss_upset(cereal_na_df, nsets = 6)
+
+```
+
+
+### Part d (Explanation: 1.5 pts)
+
+The lab suggests that we look into the `softImpute` package if we want to efficiently run the matrix completion code in Lab 12.5.2.  Run the following code to complete the matrix:
+
+```{r}
+#| label: use softImpute
+cereal_svd <- softImpute(cereal_na)
+
+## This line recreates the original matrix with NAs imputed
+## I use softImpute::complete() because there is also a tidyr complete()
+## that can hard-code missing values instead
+cereal_completed <- softImpute::complete(cereal_na, cereal_svd)
+
+```
+
+Look at the `cereal_completed` matrix. Can you tell which values were removed and imputed? Why or why not?
+
+#### Solution
+
+No, we cannot tell which values were removed and imputed without looking at the matrix with the missing data. The imputed values do not stand out and look similar to the other values in the dataset. This is because they are estimated based on patterns in the data.
+
+### Part e (Code: 1 pt; Explanation: 1 pt)
+
+Produce a plot similar to Figure 12.5 in the textbook. You do not have to label or color-code the points, just plot the imputed values on the y-axis and the original values on the x-axis with the line $y = x$ superimposed.
+
+Overall, does this algorithm appear to be doing a good job of imputing missing values? Does there appear to be any pattern in terms of which original values are over/under-estimated or which original values have more variation in the imputed values? Explain based on your plot.
+
+#### Solution
+
+```{r}
+#|label: Plot
+
+missing <- is.na(cereal_na)
+
+original_values <- cereal_missing[missing]
+imputed_values <- cereal_completed[missing]
+
+plot(original_values, imputed_values,
+     xlab = "Original Values",
+     ylab = "Imputed Values"
+     )
+
+abline(0, 1, col = "red", lwd = 2)
+
+```
+
+Overall the algorithm looks alright. y = x implies that imputed values are equal to original values, and the data plots are pretty close to that line. We do have a few outliers but only a few. That is the best answer I can give, reading this plot is a little difficult.

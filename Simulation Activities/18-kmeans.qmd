@@ -1,0 +1,292 @@
+---
+title: "Activity: K-Means Clustering with tidymodels"
+subtitle: "Math 437"
+format: html
+editor: source
+---
+
+```{r}
+#| label: load packages
+
+library(mvtnorm) # for simulating the data
+library(tidyverse)
+library(tidymodels)
+library(tidyclust)
+library(GGally) # for ggplot2 style scatterplot matrices
+
+```
+
+Note the new package `tidyclust`; this is the `tidymodels` package that does clustering, but it is *not* automatically loaded with `tidymodels`.
+
+Let's simulate data from 3 groups.
+
+```{r}
+#| label: 3 clusters
+
+mu1 <- c(42, 75)
+Sigma1 <- matrix(c(2, 0.1, 0.1, 2), nrow = 2)
+
+mu2 <- c(39, 70)
+Sigma2 <- matrix(c(10, 8, 8, 10), nrow = 2)
+
+mu3 <- c(45, 70)
+Sigma3 <- matrix(c(5, -2, -2, 5), nrow = 2)
+
+set.seed(437)
+fake_group1 <- rmvnorm(n = 50, mean = mu1, sigma = Sigma1)
+fake_group2 <- rmvnorm(n = 40, mean = mu2, sigma = Sigma2)
+fake_group3 <- rmvnorm(n = 30, mean = mu3, sigma = Sigma3)
+fake_data_matrix <- rbind(fake_group1, fake_group2, fake_group3)
+
+sim_data <- data.frame(
+  c(rep("A", 50), rep("B", 40), rep("C", 30)),
+  fake_data_matrix
+)
+
+names(sim_data) <- c("Group", "x1", "x2")
+
+```
+
+
+```{r}
+#| label: plot simulated data
+
+```
+
+We can see that the bottom left, bottom right, and bottom center are pretty well-defined, but the middle of the plot is a bit messy.
+
+## How Does K-Means Clustering Work?
+
+The general algorithm for k-means clustering is:
+
+1. Choose some set of $k$ initial cluster assignments
+2. Compute the cluster centroid for each cluster (the vector of means of each feature)
+3. Assign the observation to the cluster with the closest centroid
+4. Repeat Steps 2-3 until convergence
+
+### Choosing Initial Clusters
+
+* The algorithm suggested by the textbook indicates to randomly assign each point in the dataset to an initial cluster, then compute the centers of each cluster. This is generally inefficient as the initial centers tend to be close to each other.
+* The default in R is to pick the initial centers uniformly at random from the observations in the dataset.
+* The default in MATLAB is to pick the first initial center uniformly at random from the observations in the dataset, then choose subsequent centers randomly from the non-chosen points with probability proportional to the squared Euclidean distance between the point and its nearest already-chosen center ("k-means++" algorithm). This tends to improve convergence because the initial centers tend to be more spread out. I'm not sure if it's actually implemented in any R packages, though.
+* There are various deterministic methods (e.g., using Ward's distance), but these are generally not recommended as there is no guarantee we start in a "good" partition and we cannot "randomize" our way out.
+
+Let's pick 3 initial cluster centroids uniformly at random from our initial data:
+
+```{r}
+#| label: initial centers
+
+```
+
+### Updating the Clusters
+
+There are three general algorithms used to do k-means clustering: Lloyd's algorithm (detailed in the book), MacQueen's algorithm, and Hartigan's algorithm (the default in R, `Hartigan-Wong`).
+
+* Lloyd's algorithm batch-assigns points to clusters on each iteration. This typically requires more iterations.
+* MacQueen's algorithm and Hartigan's algorithm sequentially assign points to clusters and stop once we go through the entire set of `n` data points without reassigning any point. The main difference is that MacQueen's algorithm swaps a point if it is closer to another center, while Hartigan's algorithm swaps a point if doing so would decrease the sum of squared error for the cluster containing that point. These methods tend to take fewer iterations.
+
+Generally, Hartigan's algorithm is preferred as it is guaranteed to not do weird things; however, none of these methods are guaranteed to achieve the global optimum.
+
+If you want to change from the R default, you can pass the argument `algorithm` to the `kmeans` function (if using base R) or the `set_args` function (if using `tidymodels`).
+
+Let's update using Lloyd's algorithm.
+
+```{r}
+#| label: Step 1 update
+
+
+```
+
+```{r}
+#| label: plot the clusters
+
+```
+
+Now we need to compute the new cluster centroids.
+
+```{r}
+#| label: end Step 1
+
+
+```
+
+We generally want to keep track of the total within-cluster variation:
+
+```{r}
+#| label: within cluster variation
+
+```
+
+
+Notice that now some points are closer to a different cluster's center than their own cluster. So we can compute the distances again and reassign any points who "should be" in a different cluster:
+
+```{r}
+#| label: Step 2 update
+
+
+```
+
+Once we've reassigned any points we need do, we re-compute the cluster centroids and check total within-cluster sum of squared variation.
+
+```{r}
+#| label: end Step 2
+
+
+```
+
+```{r}
+#| label: within cluster variation Step 2
+
+```
+
+Now we do it again:
+
+```{r}
+#| label: Step 3 update
+
+```
+
+Notice that we continue to get better separation between the centroids on each iteration and that the within-cluster sum of squared variation decreased again, but not by as much. It will continue to decrease on each iteration until one of two things happens:
+
+1. The cluster assignments stop changing
+2. The cluster assignments change in an infinitely repeatable loop (usually this is something like the same 2 points flip-flopping clusters)
+
+## Clustering with `tidyclust`
+
+Technically speaking, clustering algorithms are inherently exploratory, and you *do not* need to make training-test splits unless you are using clustering as part of EDA pursuant to creating a supervised learning model. However, `tidymodels` includes some nice functions that will predict which cluster a new observations will go in, so we will do the training-test split to illustrate how those functions work.
+
+```{r}
+#| label: split data
+Restrain <- readr::read_csv("Data/Restrain.csv")
+
+set.seed(120)
+Restrain_split <- initial_split(Restrain, prop = 0.80,
+                                strata = SubCategory) 
+
+Restrain_train <- training(Restrain_split)
+Restrain_test <- testing(Restrain_split)
+```
+
+The `k_means` function, like pretty much everything else in the tidymodels ecosystem, includes an `engine` argument. We will use the `stats` engine (which runs the default `kmeans`), but other packages  (such as `ClusterR`) are possible to use.
+
+### Parameters to Tune
+
+In the simulation section, we chose 3 clusters because we *knew* there were 3 groups in our data. But in reality, we don't know how many distinct groups we have in our data.
+
+We can *tune* the number of clusters to look at the final cluster partitions at different values of k:
+
+```{r}
+#| label: set up kmeans model
+
+```
+
+It is *highly* recommended to run k-means clustering a whole bunch of times using different randomly-selected initial centers. The reason for this is that the solution at convergence is not guaranteed to be a global optimum, so by starting from a bunch of different places we increase the likelihood that *one* of those solutions is globally optimal. 
+
+The textbook suggests that 20 and 50 are conventional "large enough" numbers. However, the `kmeans` function uses a default of 1. Therefore, we are almost certainly going to pass the argument `nstart` to the `set_args` function.
+
+```{r}
+#| label: run from many starting clusters
+
+
+```
+
+### Preprocessing the Data
+
+Clustering algorithms rely *heavily* on the idea of a distance between two points, or the distance between a point and a mean. Therefore, when preprocessing the data, it is *critical* to think about what the "distance" between two points means:
+
+* Nominal variables should always be converted to indicator variables, so that a one-unit "distance" represents the change to a category from a reference category. Depending on the algorithm, the choice of reference category can be very important for non-binary variables.
+* Ordinal variables should be converted to "ranks", although you will have to put some thought into how many "ranks" correspond to a one-unit "distance" (e.g., does one unit represent the distance from "Strongly Agree" to "Agree" or from "Strongly Agree" to "Neutral"?).
+* Numerical variables often need to be transformed so that "distance" measures correspond better to intuition. For example, I always log2-transform frequency (Hz) variables because the "intuitive" measure of distance is an octave (doubling in frequency). You may also consider transformations if a variable is highly skewed or has extreme outliers; Box-Cox (and its generalization to negative values, Yeo-Johnson) transformations are popular.
+* Numerical variables should almost always be standardized to have mean 0 and standard deviation 1 (after transformation), so that a distance of 1 consistently corresponds to a difference in z-scores of 1 (on the transformed scale).
+* If you have a lot of variables, dimensionality reduction techniques such as PCA may be useful for both reducing the number of features in the model and reducing the correlation of those features.
+* The `step_zv()` step is useful for removing completely irrelevant variables - either numerical variables that contain the same value for every observation or dummy variables that correspond to a category no observations are actually in. 
+
+```{r}
+#| label: preprocessing sim_data
+kmeans_recipe <- recipe(~ Taste + Cravings + Healthiness, 
+                           data = Restrain_train) |>
+  step_BoxCox(all_numeric_predictors()) |> # deal with skew issues - Healthiness is bimodal and skewed right
+  step_normalize(all_numeric_predictors()) |> # deal with different variances
+  step_dummy(all_nominal_predictors()) |> # this won't do anything here but is necessary on the batting data
+  step_zv(all_predictors()) # this won't do anything here but is necessary on the batting data
+```
+
+Technically, k-means clustering can run *without* assuming normality or centering/scaling the predictors (as we did with the simulated data). However, if you run k-means clustering without doing any pre-processing, you need to make sure that a difference of "1 unit" means the same thing in *every* dimension of the predictor space.
+
+### Tuning the Model
+
+```{r}
+#| label: create workflow
+
+
+```
+
+We're going to use 5-fold cross-validation to tune the number of clusters.
+
+```{r}
+#| label: tune number of clusters
+
+```
+
+### Choosing the Number of Clusters
+
+
+We typically plot the results of our tuning on a scree plot. It will have a very similar shape to the scree plot in PCA, but instead of the number of principal components on the horizontal axis, we plot the number of clusters. On the vertical axis, the ratio of within to total sum of squares is essentially equivalent to "percent variance explained" in PCA.
+
+```{r}
+#| label: scree plot
+
+```
+
+1. How many clusters should we choose? Why?
+
+```{r}
+#| label: finalized workflow
+
+```
+
+### Fitting the Model
+
+Once we've selected the number of clusters, we can fit the model on the full training set (just like everything else we've tuned).
+
+```{r}
+#| label: now fit the model
+
+```
+
+Let's see what the cluster assignments look like:
+
+```{r}
+#| label: investigate cluster assignments
+
+
+```
+
+2. What are the characteristics of the red, green, and blue clusters?
+
+```{r}
+#| label: cluster 1
+
+```
+
+```{r}
+#| label: table by SubCategory
+
+```
+
+### Making Predictions
+
+Remember that all of the transformation and normalization steps are done on the test set based on the values from the *training* dataset. We just let the recipe take care of this rather than coding it ourselves.
+
+```{r}
+#| label: augment model
+
+```
+
+If we want to see whether the predictions are any good, we can combine the clusters in the training set with the clusters predicted from the test set and see how well they overlap.
+
+```{r}
+#| label: plot everything
+
+```
+

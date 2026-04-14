@@ -1,0 +1,337 @@
+---
+title: "Activity: Principal Component Analysis with tidymodels"
+subtitle: "Math 437"
+format: html
+editor: source
+---
+
+```{r}
+#| label: lahman data
+library(Lahman)
+library(tidymodels)
+library(tidyverse)
+salaries <- Salaries %>%
+  dplyr::select(playerID, yearID, teamID, salary)
+peopleInfo <- People %>%
+  dplyr::select(playerID, birthYear, birthMonth, nameLast,
+         nameFirst, bats)
+batting <- battingStats() %>% 
+  left_join(salaries, 
+            by =c("playerID", "yearID", "teamID")) %>%
+  left_join(peopleInfo, by = "playerID") %>%
+  mutate(age = yearID - birthYear - 
+           1L *(birthMonth >= 10)) %>%
+  arrange(playerID, yearID, stint)
+
+batting_2016 <- batting %>% filter(yearID == 2016,
+                                   !is.na(salary),
+                                   G >= 100, AB >= 200
+                                   ) %>%
+  mutate(lgID = factor(lgID, levels = c("AL", "NL"))) # fix the defunct league issue
+
+```
+
+### Data Wrangling
+
+PCA generally does not do well when the variables of interest are on wildly different scales, because the proportion of total variation attributed to each variable obviously depends on the scale of those variables.
+
+Here we're going to do some data transformation to scale everything to [0,1]. Instead of saying 0 = minimum and 1 = maximum, we'll divide all the counting stats by the number of times at the plate (`PA`). 
+
+We'll use `transmute` as a combination of `mutate` and `select`.
+
+```{r}
+#| label: get batting stats on similar scales
+batting_rate_stats <- batting_2016 |>
+  transmute(
+    Name = paste(nameFirst, nameLast),
+    BA = BA,
+    SlugPct = SlugPct,
+    OBP = OBP, # these 3 are already rate stats
+    BBRate = BB/PA, # walks per time at the plate
+    SORate = SO/PA, # strikeouts per time at the plate
+    DoubleRate = X2B/PA,
+    TripleRate = X3B/PA,
+    HRRate = HR/PA,
+    RRate = R/PA,
+    RBIRate = RBI/PA,
+    SBRate = SB/PA,
+  )
+```
+
+## Setting up PCA with tidymodels
+
+Principal component analysis is implemented in tidymodels with the `step_pca()` function in the `recipes` package. This step typically comes at the very end of a recipe:
+
+```{r}
+#| label: step_pca
+
+pca_recipe <- recipe(
+  ~ ., data = batting_rate_stats
+) |>
+  update_role(Name, new_role = "id") |>
+  step_normalize(all_numeric_predictors()) |>     # normalizes, converts to z-scores
+  step_pca(all_predictors(), num_comp = 10)
+
+```
+
+1. Why didn't we define a model first?
+
+2. Why did we use the function `update_role` on the variable `Name`?
+So that name is treated as name and not value
+
+3. Why should we use the `step_normalize` function?
+
+4. What does the `num_comp` argument do?
+How many principal components to keep to put into model
+
+## Where Did the Training/Test Split Code Go?
+
+In unsupervised learning, there is *no* response variable to predict. Therefore, there is (typically) *no* loss function to minimize, there is *no* worry about overfitting, and we do *not* need to make a training-test split.
+
+However, principal component analysis (PCA) is often used in exploratory data analysis as a means toward dimensionality reduction of the predictors before fitting a (supervised) model. When unsupervised learning is used for this purpose, it's important to make your splits *before* running PCA, because otherwise information in the test set will be used to determine your principal components.
+
+## Prepping, Juicing and Baking
+
+In older versions of `recipes` there were 3 functions that you needed to know:
+
+* `prep` prepared your recipe
+* `juice` applied your recipe to the training set
+* `bake` applied your recipe to a holdout set
+
+In the current version of `recipes`, no one uses `juice` anymore (as using `bake` with `new_data = NULL` will do the same thing), and it's very rare to `prep` and `bake` because these steps are typically automatically done when you set up the `workflow`. (If we're doing PCA before fitting supervised learning models, then `step_pca` is just a step in the recipe.)
+
+However, because we don't have an associated model, we won't be using a workflow. This means we have to `prep` our recipe on our own:
+
+```{r}
+#| label: prep the recipe
+
+pca_prep <- prep(pca_recipe)
+pca_prep
+
+```
+
+Now we fit the PCA on the training set using `bake`:
+
+```{r}
+#| label: bake the recipe
+
+pca_baked <- pca_prep |>
+  bake(new_data = NULL)     # bake on the training set, no new data
+pca_baked
+
+```
+
+## Extracting the Loadings
+
+The easiest way to obtain the loadings is to use the `tidy` function on the PCA step of the recipe.
+
+```{r}
+#| label: extract loadings with tidy
+
+pca_tidy <- tidy(pca_prep,
+                 2,     # step 2 - PCA
+                 type = "coef"     # extract loadings
+                 )
+head(pca_tidy, 20)
+
+```
+
+This looks really annoying, but it actually makes things really nice to plot with `ggplot2`:
+
+```{r}
+#| label: plot loadings with ggplot2
+
+pca_tidy |>
+  filter(component %in% c("PC1", "PC2")) |>
+  ggplot(
+    mapping = aes(
+      x = value,
+      y = terms,
+      fill = abs(value)
+    )) +
+  geom_col() +     # column graph - "horizontal bar chart"
+  theme(legend.position = "none") +     # removes legend
+  scale_fill_gradient(low = "black", high = "red") +
+  facet_wrap(vars(component))     # PC1 & PC2 on seperate graphs
+
+```
+
+We can use some `tidyr` package functions to get the loadings matrix back out:
+
+```{r}
+#| label: get loadings as data frame
+
+pca_loadings <- pca_tidy |>
+  pivot_wider(
+    names_from = "component",
+    values_from = "value"
+  ) |>
+  dplyr::select(!id)
+
+arrange(pca_loadings, desc(abs(PC1)))
+
+```
+
+1. Which variables seem to contribute most to PC1? What about PC2? Does it matter whether the sign of the loading is positive or negative?
+
+## Biplot
+
+The biplot is a way of presenting both the principal component scores and loadings on the same graph. Biplots get a bit fiddly without a specific package, so with `ggplot2` it's easier to plot the scores and loadings separately:
+
+```{r}
+#| label: biplot on separate graphs
+ggplot(
+  data = pca_baked, 
+             aes(x = PC01, y = PC02)) +
+  geom_point() +
+  geom_text(
+    aes(label = Name),
+    check_overlap = TRUE) +
+  labs(
+    title = "Principal Component Scores",
+       x = "PC1 (Offensive Ability)",
+       y = "PC2 (Speed vs Power)")
+  
+ ggplot(
+    data = pca_loadings) +
+  geom_segment(aes(
+    x = 0, y = 0,
+    xend = PC1, yend = PC2
+  ),
+  arrow = arrow(type = "open")
+  ) +
+  geom_text(
+    aes(x = PC1,
+        y = PC2,
+        label = terms),
+    check_overlap = TRUE
+) +
+  labs(
+    title = "Principal Component Loadings",
+     x = "PC1 (Offensive Ability)",
+     y = "PC2 (Speed vs Power)")
+
+```
+
+Remember that the PCs are unique *up to a sign flip*, so we always need to check whether a high positive or high negative value of PC1 is the "above average" one. Here the players on the far left are the actually good hitters, and the players on the top are the ones with more speed vs. the players on the bottom having more power.
+
+If you get really annoyed by having to look at the plots separately, you can just run the base R `biplot`. However, there is some annoying pre-processing that you have to do because `biplot` requires a matrix: 
+
+```{r}
+#| label: biplot with base plot
+biplot(
+  x = pca_baked |>
+    dplyr::select(PC01, PC02) |>
+    as.matrix(),
+  y = pca_loadings |>
+    column_to_rownames(var = "terms") |>
+    dplyr::select(PC1, PC2) |>
+    as.matrix()
+)
+```
+
+1. What do the numbers represent on this biplot?
+
+## How Many PCs Should We Use?
+
+### Scree Plots
+
+We typically want to investigate the proportion of variance explained by each principal component. This means we need to retidy the prepped recipe with a different `type` argument:
+
+```{r}
+#| label: tidy the pve with type variance
+
+pca_pve <- tidy(
+  pca_prep,
+  2,
+  type = "variance"
+)
+
+pca_pve
+
+```
+
+```{r}
+#| label: scree plots with ggplot2
+
+ggplot(
+  data = pca_pve |> filter(terms == "cumulative percent variance"),
+  mapping = aes(
+    x = component,
+    y = value)
+) + 
+  geom_point() + geom_line() +
+  labs(
+    x = "Percentage of Variance Explained",
+    y = "Number of PCs" 
+  )
+
+```
+
+
+1. Explain how to read these scree plots. If you had to choose how many principal components to keep, how many would you use? Why?
+
+
+### If Time: Permutation Testing
+
+Rather than eyeballing a scree plot, we can do a permutation test to determine if the proportion of variance explained by a PC is "significantly" higher than the equivalent PC in a "null model."
+
+Remember the steps in permutation testing:
+
+1. Assume "exchangeability under the null hypothesis" and break the structure of the data. In a permutation test involving PCA, we don't have a response variable, and the "null model" represents a model in which the predictors are all completely uncorrelated. So we're going to randomly reorder *everything* we care about.
+2. Compute the test statistic on the randomly reordered data. Here we're going to use the percent variance explained by each component. Even though the null model is correct in this randomly reordered data, we still expect the proportion of variance explained to be higher for PC1 than for subsequent PCs, just because we are ordering a bunch of essentially random proportions and PC1 is always the largest of them.
+3. Repeat steps 1-2 a whole bunch of times.
+4. Compare the observed statistic value to the permutation null distribution.
+
+```{r}
+#| label: permutation test for PCA
+B <- 1000 # number of replications
+
+pca_fake_variance <- vector("list", length = B)
+
+for(i in 1:B){
+  # this creates new fake data by randomly reordering every column of our batting_rate_stats dataset
+  # thus, there is no "structure" to the data and the PCs should only reflect random spurious correlations
+  fake_data <- lapply(batting_rate_stats, sample) |>
+    as.data.frame()
+
+  pca_fake <- pca_recipe |>
+    prep(training = fake_data) # give it the new data
+
+  # gives all the variance-related statistics
+  pca_fake_variance[[i]] <- tidy(
+    pca_fake, 
+    type = "variance",
+    number = 2
+  )
+}
+```
+
+```{r}
+#| label: plot results of the permutation test
+# turn the list into a data frame
+pca_sim_variance <- bind_rows(pca_fake_variance)
+
+alpha_corrected <- 0.05/max(pca_sim_variance$component) # Bonferroni correction
+# Strictly speaking, we should take advantage of the fact that
+# the PVE for PC2 depends on the PVE for PC1
+# But here we just use a very conservative correction
+
+pca_95pct <- pca_sim_variance |> filter(terms == "percent variance") |>
+  group_by(component) |>
+  summarize(lower = quantile(value, alpha_corrected/2),
+            upper = quantile(value, 1 - alpha_corrected/2))
+
+
+ggplot(pca_pve |> filter(terms == "percent variance")) +
+  geom_point(mapping = aes(x = component, y = value)) +
+  geom_line(mapping = aes(x = component, y = value)) +
+  geom_errorbar(data = pca_95pct, mapping = aes(x = component,
+                                               ymin = lower, ymax = upper),
+               color = "red", width = 0.25) +
+  labs(x = "Number of PCs",
+       y = "Percent Variance Explained")
+```
+
+
+1. What do the "error bars" on this scree plot represent? If you had to choose how many principal components to keep, how many would you use? Why?
