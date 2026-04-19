@@ -1,6 +1,6 @@
 ---
 title: "Lab Assignment #8"
-author: "Math 437 - Modern Data Analysis"
+author: "Math 437 - Modern Data Analysis - Jason Soto"
 format: pdf
 editor: source
 ---

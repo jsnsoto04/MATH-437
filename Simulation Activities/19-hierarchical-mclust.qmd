@@ -1,0 +1,391 @@
+---
+title: "Activity: Hierarchical and Model-Based Clustering"
+subtitle: "Math 437"
+format: html
+editor: source
+---
+
+## New Packages
+
+```{r}
+#| label: load package
+#| message: false
+#| warning: false
+library(tidyverse)
+library(tidymodels)
+library(tidyclust)
+library(dendextend)
+library(mclust)
+library(factoextra)
+```
+
+Note the new packages: `dendextend` is an awesome package for making the results of your hierarchical clustering analysis "pop", `mclust` does model-based clustering, and `factoextra` makes `ggplot2`-based visualizations for PCA and model-based clustering. 
+
+## Data
+
+Hierarchical clustering is *much* easier to visualize with a relatively small number of observations. So here we'll take a random sample of 60 fruits and vegetables to cluster.
+
+```{r}
+#| label: load data
+Restrain <- readr::read_csv(here::here("Data/Restrain.csv"))
+
+fv <- Restrain |>
+  filter(SubCategory %in% c("Fruits", "Vegetables"))
+
+fv$SubCategory <- factor(fv$SubCategory, levels = c("Fruits","Vegetables"))
+
+set.seed(1880)
+fv_split <- initial_split(fv, prop = 0.50) 
+
+fv_train <- training(fv_split)
+fv_test <- testing(fv_split)
+
+```
+
+## Hierarchical Clustering Analysis
+
+```{r}
+#| label: set up the model
+
+fv_hc_complete <- hier_clust(
+  linkage_method = "complete"     # default
+)     # model
+
+fv_recipe <- recipe(
+  ~ Taste + Healthiness + Cravings, data = fv_train
+) |>
+  step_normalize(all_numeric_predictors())     # all distances are calculated using z-scores, to even out values since measured in different metrics
+
+fv_hc1 <- workflow() |>
+  add_model(fv_hc_complete) |>
+  add_recipe(fv_recipe)
+
+```
+
+### Defining the Linkage Method
+
+While the distance between two points is (relatively) straightforward to measure, the distance between two groups of points is not. The `linkage_method` argument indicates how the dissimilarity (generalized "distance") between two clusters is computed.
+
+There are several possible methods that can be used to define the linkage. The most popular of these are:
+
+#### Complete linkage
+
+This is the default in `hier_clust`.
+
+$$
+D(k, k') = \max_{x_i \in k, x_i' \in k'}||x_i - x_i'||
+$$
+
+Essentially, find all possible pairwise Euclidean distances between the points in the clusters $k$ and $k'$, then find the maximum of those distances.
+
+#### Single linkage
+
+$$
+D(k, k') = \min_{x_i \in k, x_i' \in k'}||x_i - x_i'||
+$$
+
+Essentially, find all possible pairwise Euclidean distances between the points in the clusters $k$ and $k'$, then find the *minimum* of those distances instead of the maximum.
+
+#### Ward's Method
+
+$$
+D(k, k') = ESS_{k \cup k'} - (ESS_{k} + ESS_{k'})
+$$
+
+where ESS is the "error sum of squares" (essentially RSS or within-group sum of squares) and $k \cup k'$ is the merged cluster containing both the observations in cluster $k$ and the observations in cluster $k'$. Ward's method has very nice connections with LDA, PCA, and k-means clustering.
+
+Just to be confusing, `hier_clust` will accept either `ward.D` or `ward.D2` as a `linkage_method`. My understanding is that you want to use `ward.D2`. 
+
+#### Other Methods
+
+The textbook also talks about `average` and `centroid` methods. Don't use `centroid` unless you really know what you're doing.
+
+### What About `num_clusters`?
+
+In k-means clustering, there is no guarantee that the best `k`-cluster model has anything to do with the best `(k+1)`-cluster model. However, in hierarchical clustering, as the number of clusters increases, old clusters just split into new ones. That is, if you use `num_clusters = 3` and then decide you want to use `num_clusters = 4`, the only thing that will happen is one of the original 3 clusters will split in 2. Literally the only reason to set a value for `num_clusters` in `hier_clust` is to tell R (after the fact) how many clusters you see in the visualization of the results - typically we keep this at the default `NULL` until we see the results and decide how many clusters to use.
+
+## Visualizing the Results
+
+```{r}
+#| label: fit the model
+
+hc_complete_fit <- fit(
+  fv_hc1,
+  data = fv_train
+)
+
+```
+
+A *dendrogram* is a tree-like visualization of the clusters.
+
+```{r}
+#| label: plot dendrogram
+
+fv_dendrogram <- hc_complete_fit |>
+  extract_fit_engine() |>
+  as.dendrogram()
+
+plot(fv_dendrogram)
+
+```
+
+
+This is annoying to read. Let's make some customizations to the original plot:
+
+```{r}
+#| label: customize plot dendrogram
+
+fv_Foods <- fv_train$Food[
+  str_remove(labels(fv_dendrogram), "v") |> as.numeric()
+]
+fv_dendrogram_3clusters <- fv_dendrogram |>
+  set("labels", fv_Foods) |>
+  set("labels_cex", 0.8) |>
+  set("branches_lwd", 0.7) |>
+  color_branches(k = 3, col = c("black","blue", "red")) |>
+  color_labels(k = 3, col = c("black", "blue", "red"))
+
+plot(fv_dendrogram_3clusters)
+
+```
+
+1. Is Pear (very right of the black cluster) considered more similar to a Tomato (very left) or a Carrot (very left of the blue cluster)? Why?
+
+Tomato, similarity is measured by how soon a cluster is made, y-axis, not by x-axis.
+
+2. Apple (fourth from the left) is sandwiched in between Raspberries (third from left) and Blueberries (fifth from left). Which food is it considered more similar to? Why?
+
+Blueberries as it is immediately clustered with it.
+
+3. With a four-cluster partition, which cluster (black, blue, or red) would get split in two? Why?
+
+Black, it gets cut off from blue and red
+
+Once we determine the number of clusters, we can obtain the centroids (geometric means) of each predictor in each cluster:
+
+```{r}
+#| label: extract centroids
+
+hc_complete_centroids <- hc_complete_fit |>
+  extract_centroids(num_clusters = 3)
+
+hc_complete_centroids
+
+# Means of each cluster technically?
+
+```
+
+Here all the healthiness scores on the original scale are high and the cravings scores are low, so it's a bit hard to interpret what the clusters have in common. One nice thing about converting to z-scores is that we can still interpret positive vs. negative z-scores the way we usually do as being "relative to average". 
+
+4. Using the general adjectives "high", "average", and "low," explain what the centroids suggest about each cluster.
+
+Note that the cluster assignments don't necessarily match the order on the dendrogram:
+
+```{r}
+#| label: extract clusters
+
+cluster_assignments_complete <- hc_complete_fit |>
+  extract_cluster_assignment(num_clusters = 3)
+
+fv_train |>
+  dplyr::select(Food) |>
+  bind_cols(cluster_assignments_complete) |>
+  slice(1:10)     # first 10 rows
+
+```
+
+The cluster assignments should be unique up to a rotation, so you may have different cluster-to-color mappings, but generally everything in the black cluster should have the same `Cluster_x` everything in the red cluster should be in the same `Cluster_y`, and everything in the blue cluster should be in the same `Cluster_z`.
+
+The plot below plots the Taste and Healthiness of the foods being clustered, as well as the cluster assignments. The large asterisks show the centroids of the 3 clusters.
+
+```{r}
+#| label: plot cluster assignments
+
+undo_normalize <- function(x, orig){
+  return(x * sd(orig) + mean(orig))     # undo normalization
+}
+
+hc_original_scale <- hc_complete_centroids |>
+  mutate(
+    Taste = undo_normalize(Taste, orig = fv_train$Taste),
+    Healthiness = undo_normalize(Healthiness, orig = fv_train$Healthiness),
+    Cravings = undo_normalize(Cravings, orig = fv_train$Cravings)
+  )
+
+ggplot(data = fv_train |> bind_cols(cluster_assignments_complete),
+       aes(x = Healthiness, y = Taste, color = .cluster)) +
+  geom_point() +
+  geom_point(data = hc_original_scale, shape = 8, size = 5) +
+  scale_color_manual(labels = c("Cluster_1", "Cluster_2", "Cluster_3"),
+                     values = c("blue", "black", "red")) +
+  theme(legend.position = "none")
+
+# We just denormalized the centroids and plotted onto the same scale plot
+
+```
+
+The tidyclust authors suggest *not* using `predict` on the training set, since it will predict the observations as if they were *new* data (and thus could get predicted to be in a totally different cluster!). However, there is no such issue making predictions on the test set:
+
+```{r}
+#| label: make cluster predictions
+
+fv_cluster_preds <- hc_complete_fit |>
+  predict(
+    new_data = fv_test,
+    num_clusters = 3
+  )
+
+fv_test |>
+  dplyr::select(Food) |>
+  bind_cols(cluster_assignments_complete) |>
+  slice(1:10)     # first 10 rows
+
+```
+
+Let's see what a three-cluster dendrogram looks like using single linkage:
+
+```{r}
+#| label: single linkage instead
+
+```
+
+5. What differences do you notice in the shape of the tree between complete and single linkage?
+
+Let's look at Ward's method:
+
+```{r}
+#| label: with Ward method
+
+```
+
+6. Does the dendrogram produced by Ward's method look more like the complete-linkage or single-linkage tree?
+
+
+## Model-Based Clustering
+
+Model-based clustering is sometimes referred to as "soft k-means clustering." Instead of assigning each observation to a specific cluster, model-based clustering assumes a specific distribution shape within each cluster, automatically finds the optimal number of clusters based on that shape, and finds the predicted probability of each point belonging to each cluster.
+
+This approach makes it much easier to handle outliers. 
+
+### Model-Based Clustering with `mclust`
+
+Model-based clustering with `mclust` assumes a multivariate normal distribution for the set of predictors. Therefore, it is important to convert categorical variables to indicator variables and remove zero-variance variables; however, scaling is unnecessary. Also, the model assumes multivariate normality *within each cluster*, so transformation of the predictors is generally unnecessary as points far out in the tail(s) will get mapped to their own cluster.
+
+Since we only have numerical predictors here, there is no need to pre-process the data.
+
+The `mclust` package searches over many possible combinations of similarities/differences in the shape, size (volume), and orientation of the groups' distributions. Each combination is represented by a three-letter code. See <https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5096736/figure/F2/> for an illustration of the different combinations in 2-dimensional space.
+
+### Parameters to Tune
+
+None! Technically there are two parameters to tune:
+
+* The number of clusters
+* The shape of the density function within the clusters
+
+However, the `mclust` package automatically searches over the entire parameter space, so we don't need to actually *tune* anything.
+
+### Running the Model
+
+As far as I can tell, the function `gm_clust()` is coming to `tidyclust` eventually to do Gaussian Mixture Model-based clustering in the tidymodels framework, but it is not available in Version 0.2.4.
+
+Luckily there is not much pre-processing to do, and we can use the same tricks we saw in the Chapter 6 lab.
+
+```{r}
+#| label: prep with model.matrix
+
+fv_train_predictors <- model.matrix(
+  ~ Taste + Healthiness + Cravings, data = fv_train
+)[,-1]     # first column represents an intercept
+
+```
+
+```{r}
+#| label: cluster with mclust
+
+mclust1 <- Mclust(
+  fv_train_predictors,
+  G = 1:9     # search over all possible combinations of 1-9 clusters
+       # if we want a specific amount just do that
+)
+
+summary(mclust1)
+plot(mclust1, "BIC")
+plot(mclust1, "classification")
+
+```
+
+1. Briefly explain how to read this plot. How was the best model determined?
+
+```{r}
+#| label: use tidy to summarize mclust output
+
+tidy(mclust1)
+
+```
+
+2. How do we read this table? What do the foods in each cluster have in common?
+
+```{r}
+#| label: classification plot
+
+plot(mclust1, "classification")
+
+```
+
+3. Briefly explain how to read this plot. Based on your answer to Question #2, which cluster is the red cluster? Blue cluster? Green cluster?
+
+4. Notice that there is more "overlap" between the clusters - for example, some blue dots are closer to the red mean than the blue mean by Euclidean distance. Why is this?
+
+```{r}
+#| label: add clusters to training set
+
+augmented_mclust1 <- augment(
+  mclust1,
+  fv_train
+)
+
+augmented_mclust1
+
+```
+
+5. What do the `.class` and `.uncertainty` columns indicate?
+
+```{r}
+#| label: make uncertainty plot
+
+plot(mclust1, "uncertainty")
+
+```
+
+6. What do bigger and darker circles indicate on this plot?
+
+You can also use the `factoextra` package to make ggplot2-based versions of the same plot:
+
+```{r}
+#| label: use fviz_mclust for more plots
+
+fviz_mclust(mclust1, what = "BIC")
+fviz_mclust(mclust1, what = "classification")
+fviz_mclust(mclust1, what = "uncertainty", palette = "simpsons")     # "rickandmorty" also work
+
+```
+
+The main difference is that the `factoextra` versions of the classification and uncertainty plots use the first two principal components as the x-axis and y-axis instead of creating a `pairs` plot to show the clusters' relationships with each variable.
+
+### Making Predictions with `mclust`
+
+```{r}
+#| label: predictions with mclust
+
+```
+
+1. What do the `$classification` and `$z` objects represent?
+
+Unfortunately, there is no `tidy` method available, so we have to augment the test set ourselves.
+
+```{r}
+#| label: manually augment with mutate
+
+```
+
+There is *a lot* more that you can do with this package, but this hopefully gives you the basic idea.

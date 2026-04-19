@@ -51,6 +51,11 @@ names(sim_data) <- c("Group", "x1", "x2")
 ```{r}
 #| label: plot simulated data
 
+ggplot(
+  data = sim_data,
+  mapping = aes(x = x1, y = x2, color = Group)) +
+  geom_point()
+
 ```
 
 We can see that the bottom left, bottom right, and bottom center are pretty well-defined, but the middle of the plot is a bit messy.
@@ -76,6 +81,17 @@ Let's pick 3 initial cluster centroids uniformly at random from our initial data
 ```{r}
 #| label: initial centers
 
+set.seed(118)
+
+initial_rows <- sample(1:nrow(sim_data), 3)     # 3 initial points
+centers <- sim_data |>
+  slice(initial_rows) |>     # df |> slice(1:5) is like df[1:5,]
+  mutate(
+    .cluster = seq(1,3)
+  )
+
+centers
+
 ```
 
 ### Updating the Clusters
@@ -94,11 +110,54 @@ Let's update using Lloyd's algorithm.
 ```{r}
 #| label: Step 1 update
 
+sim_step1 <- sim_data |>
+  mutate(
+    # calculate squared distance from each point to center of each cluster
+    dist1 = (x1 - centers$x1[1])^2 + (x2 - centers$x2[1])^2, 
+    dist2 = (x1 - centers$x1[2])^2 + (x2 - centers$x2[2])^2,
+    dist3 = (x1 - centers$x1[3])^2 + (x2 - centers$x2[3])^2,
+    .cluster = case_when(
+      pmin(dist1, dist2, dist3) == dist1 ~ 1,
+      pmin(dist1, dist2, dist3) == dist2 ~ 2,
+      pmin(dist1, dist2, dist3) == dist3 ~ 3
+    ),
+    dist = 2 * pmin(dist1, dist2, dist3)     # contrib to within-cluster variation
+  )
+
+head(sim_step1)
 
 ```
 
 ```{r}
 #| label: plot the clusters
+
+ggplot() +
+  geom_point(
+    data = sim_step1,
+    mapping = aes(x = x1, y = x2, color = as.factor(.cluster))
+    ) +
+  geom_point(
+    data = centers,
+    mapping = aes(x = x1, y = x2, color = as.factor(.cluster)),
+    size = 3, shape = 17     # big triangles for the centers
+  )
+
+```
+
+We generally want to keep track of the total within-cluster variation:
+
+```{r}
+#| label: within cluster variation
+
+wss_df <- sim_step1 |>
+  group_by(.cluster) |>
+  summarize(
+    wss = sum(dist)
+    )     # see eq 12.18 in ISLR
+# note: this is wss from initial cluster assignments
+
+wss_total <- sum(wss_df$wss)
+wss_total
 
 ```
 
@@ -107,13 +166,14 @@ Now we need to compute the new cluster centroids.
 ```{r}
 #| label: end Step 1
 
+centers <- sim_step1 |>
+  group_by(.cluster) |>
+  summarize(     # centroid by finding mean vector
+    x1 = mean(x1),
+    x2 = mean(x2)
+)
 
-```
-
-We generally want to keep track of the total within-cluster variation:
-
-```{r}
-#| label: within cluster variation
+centers
 
 ```
 
@@ -123,6 +183,21 @@ Notice that now some points are closer to a different cluster's center than thei
 ```{r}
 #| label: Step 2 update
 
+sim_step2 <- sim_data |>
+  mutate(
+    # calculate squared distance from each point to center of each cluster
+    dist1 = (x1 - centers$x1[1])^2 + (x2 - centers$x2[1])^2, 
+    dist2 = (x1 - centers$x1[2])^2 + (x2 - centers$x2[2])^2,
+    dist3 = (x1 - centers$x1[3])^2 + (x2 - centers$x2[3])^2,
+    .cluster = case_when(
+      pmin(dist1, dist2, dist3) == dist1 ~ 1,
+      pmin(dist1, dist2, dist3) == dist2 ~ 2,
+      pmin(dist1, dist2, dist3) == dist3 ~ 3
+    ),
+    dist = 2 * pmin(dist1, dist2, dist3)     # contrib to within-cluster variation
+  )
+
+head(sim_step2)
 
 ```
 
@@ -131,11 +206,31 @@ Once we've reassigned any points we need do, we re-compute the cluster centroids
 ```{r}
 #| label: end Step 2
 
+ggplot() +
+  geom_point(
+    data = sim_step2,
+    mapping = aes(x = x1, y = x2, color = as.factor(.cluster))
+    ) +
+  geom_point(
+    data = centers,
+    mapping = aes(x = x1, y = x2, color = as.factor(.cluster)),
+    size = 3, shape = 17     # big triangles for the centers
+  )
 
 ```
 
 ```{r}
 #| label: within cluster variation Step 2
+
+wss_df <- sim_step2 |>
+  group_by(.cluster) |>
+  summarize(
+    wss = sum(dist)
+    )     # see eq 12.18 in ISLR
+# note: this is wss from initial cluster assignments
+
+wss_total <- sum(wss_df$wss)
+wss_total
 
 ```
 
@@ -143,6 +238,33 @@ Now we do it again:
 
 ```{r}
 #| label: Step 3 update
+
+sim_step3 <- sim_data |>
+  mutate(
+    # calculate squared distance from each point to center of each cluster
+    dist1 = (x1 - centers$x1[1])^2 + (x2 - centers$x2[1])^2, 
+    dist2 = (x1 - centers$x1[2])^2 + (x2 - centers$x2[2])^2,
+    dist3 = (x1 - centers$x1[3])^2 + (x2 - centers$x2[3])^2,
+    .cluster = case_when(
+      pmin(dist1, dist2, dist3) == dist1 ~ 1,
+      pmin(dist1, dist2, dist3) == dist2 ~ 2,
+      pmin(dist1, dist2, dist3) == dist3 ~ 3
+    ),
+    dist = 2 * pmin(dist1, dist2, dist3)     # contrib to within-cluster variation
+  )
+
+head(sim_step3)
+
+ggplot() +
+  geom_point(
+    data = sim_step3,
+    mapping = aes(x = x1, y = x2, color = as.factor(.cluster))
+    ) +
+  geom_point(
+    data = centers,
+    mapping = aes(x = x1, y = x2, color = as.factor(.cluster)),
+    size = 3, shape = 17     # big triangles for the centers
+)
 
 ```
 
@@ -157,7 +279,7 @@ Technically speaking, clustering algorithms are inherently exploratory, and you 
 
 ```{r}
 #| label: split data
-Restrain <- readr::read_csv("Data/Restrain.csv")
+Restrain <- readr::read_csv(here::here("Data/Restrain.csv"))
 
 set.seed(120)
 Restrain_split <- initial_split(Restrain, prop = 0.80,
@@ -178,17 +300,14 @@ We can *tune* the number of clusters to look at the final cluster partitions at 
 ```{r}
 #| label: set up kmeans model
 
+kmeans_model <- k_means(num_clusters = tune()) |>
+  set_args(nstart = 20)     # run from 20 initial assignments
+
 ```
 
 It is *highly* recommended to run k-means clustering a whole bunch of times using different randomly-selected initial centers. The reason for this is that the solution at convergence is not guaranteed to be a global optimum, so by starting from a bunch of different places we increase the likelihood that *one* of those solutions is globally optimal. 
 
 The textbook suggests that 20 and 50 are conventional "large enough" numbers. However, the `kmeans` function uses a default of 1. Therefore, we are almost certainly going to pass the argument `nstart` to the `set_args` function.
-
-```{r}
-#| label: run from many starting clusters
-
-
-```
 
 ### Preprocessing the Data
 
@@ -218,6 +337,9 @@ Technically, k-means clustering can run *without* assuming normality or centerin
 ```{r}
 #| label: create workflow
 
+kmeans_wflow <- workflow() |>
+  add_model(kmeans_model) |>
+  add_recipe(kmeans_recipe)
 
 ```
 
@@ -226,22 +348,69 @@ We're going to use 5-fold cross-validation to tune the number of clusters.
 ```{r}
 #| label: tune number of clusters
 
+set.seed(157)
+kmeans_kfold <- vfold_cv(
+  data =  Restrain_train,
+  v = 5, repeats = 1
+)
+
+# do the tuning
+nclusters_grid <- data.frame(num_clusters = seq(1,10))
+# inside tuning for tidyclust, grid must be a tibble/data frame
+
+kmeans_tuned <- tune_cluster(
+  kmeans_wflow,
+  resamples = kmeans_kfold,
+  metrics = cluster_metric_set(
+    sse_total,     # should be same total SSE for all values of K
+    sse_within_total,     # should decrease as K increases
+    sse_ratio     # sse_within_total/sse_total
+  )
+)
+
+tuned_metrics <- collect_metrics(kmeans_tuned)
+
 ```
 
 ### Choosing the Number of Clusters
-
 
 We typically plot the results of our tuning on a scree plot. It will have a very similar shape to the scree plot in PCA, but instead of the number of principal components on the horizontal axis, we plot the number of clusters. On the vertical axis, the ratio of within to total sum of squares is essentially equivalent to "percent variance explained" in PCA.
 
 ```{r}
 #| label: scree plot
 
+# At K = 1, all obs. are in the same cluster and total WSS = TSS
+# At K = n, all obs. are in a cluster of size 1 and total WSS = 0
+
+tuned_metrics |>
+  filter(.metric == "sse_ratio") |>
+  ggplot(
+    mapping = aes(x = num_clusters, y = mean)
+  ) +
+  geom_point() +
+  geom_line() +
+  labs(
+    title = "Scree Plot",
+    x = "Number of Clusters",
+    Y = "Mean WSS/TSS (5 Folds)"
+  ) +
+  scale_x_continuous(breaks = seq(1,10))
+
 ```
 
 1. How many clusters should we choose? Why?
 
+4, it starts to even off there, that is the elbow.
+
 ```{r}
 #| label: finalized workflow
+
+kmeans_4clusters <- kmeans_wflow |>
+  finalize_workflow_tidyclust(
+    parameters = list(num_clusters = 4)
+  )
+
+kmeans_4clusters
 
 ```
 
@@ -252,6 +421,20 @@ Once we've selected the number of clusters, we can fit the model on the full tra
 ```{r}
 #| label: now fit the model
 
+set.seed(210)
+
+kmeans_fit <- kmeans_4clusters |>
+  fit(
+    data = Restrain_train
+  )
+
+cluster_assignments <- bind_cols(
+  Restrain_train,
+  extract_cluster_assignment(kmeans_fit)     # gets clusters
+)
+
+head(cluster_assignments)
+
 ```
 
 Let's see what the cluster assignments look like:
@@ -259,6 +442,13 @@ Let's see what the cluster assignments look like:
 ```{r}
 #| label: investigate cluster assignments
 
+ggpairs( # ggplot version of scatterplot matrix
+  cluster_assignments,
+  columns = c("Taste", "Cravings", "Healthiness"),     # columns to plot
+  lower = list(continuous = "points"),     # scatterplots in lower triangular matrix
+  upper = list(continuous = "points"),     # scatterplots in lower triangular matrix
+  aes(color = .cluster)
+)
 
 ```
 
@@ -267,10 +457,21 @@ Let's see what the cluster assignments look like:
 ```{r}
 #| label: cluster 1
 
+cluster_assignments |>
+  filter(.cluster == "Cluster_1") |>     # Not healthy and not too good either in comparison
+  select(
+    Food,
+    Taste,
+    Cravings,
+    Healthiness
+  )
+
 ```
 
 ```{r}
 #| label: table by SubCategory
+
+xtabs(~ .cluster + SubCategory, data = cluster_assignments)
 
 ```
 
@@ -281,12 +482,33 @@ Remember that all of the transformation and normalization steps are done on the 
 ```{r}
 #| label: augment model
 
+kmeans_predictions <- augment(
+  kmeans_fit, 
+  new_data = Restrain_test
+  )
+ggpairs(kmeans_predictions, 
+        columns = c("Taste", "Cravings", "Healthiness"),
+        upper = list(continuous = "points"),
+        lower = list(continuous = "points"),
+        aes(color = .pred_cluster)
+)
+
 ```
 
 If we want to see whether the predictions are any good, we can combine the clusters in the training set with the clusters predicted from the test set and see how well they overlap.
 
 ```{r}
 #| label: plot everything
+
+all_clusters <- bind_rows(
+  cluster_assignments,
+  kmeans_predictions |> rename(.cluster = .pred_cluster) # rename cluster variable name
+)
+ggpairs(all_clusters, 
+        columns = c("Taste", "Cravings", "Healthiness"),
+        upper = list(continuous = "points"),
+        lower = list(continuous = "points"),
+        aes(color = .cluster))
 
 ```
 
