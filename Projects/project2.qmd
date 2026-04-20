@@ -1,0 +1,29 @@
+---
+title: "Project 2"
+author: "Your Name Here!"
+format: pdf
+editor: source
+---
+
+## Section 1: Data Description
+
+```{r}
+#| label: load packages
+
+
+```
+
+```{r}
+#| label: import data
+
+
+```
+
+## Section 2: Data Wrangling and Exploratory Data Analysis
+
+
+## Section 3: Unsupervised Learning
+
+
+## Section 4: Supervised Learning
+

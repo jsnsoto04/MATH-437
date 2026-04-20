@@ -1,0 +1,271 @@
+---
+title: "Activity: Bayesian Approaches to Classification"
+subtitle: "Math 437"
+format: html
+editor: source
+---
+
+## Background Information
+
+1. How does a Bayesian approach to classification work, in general?
+
+In these examples we will continue to work with the `Restrain` dataset. We will try to classify the foods that aren't fruits/vegetables as a sweet snack, savory snack, or takeout item.
+
+```{r}
+#| label: packages and data
+#| message: false
+#| warning: false
+library(tidyverse)
+library(tidymodels)
+library(forcats) # tidyverse for factors
+library(MASS) # LDA and QDA
+library(e1071) # Naive Bayes
+library(klaR) # LDA with tidymodels
+library(discrim) # required for naive Bayes with tidymodels
+Restrain <- readr::read_csv(here::here("Data/Restrain.csv"))
+
+Restrain2 <- Restrain |> 
+  filter(!(SubCategory %in% c("Fruits", "Vegetables"))) |>
+  mutate(SubCategory =
+  fct_collapse(SubCategory,
+    savory = c("Bakery (savoury)", "Savoury snacks"),
+    sweet = c("Bakery (sweet)", "Biscuits", "Confectionery", "Desserts"),
+    takeout = c("Takeaway (chain)", "Takeaway (generic)")
+    )
+)
+
+set.seed(103)
+Restrain_split <- initial_split(Restrain2, prop = 0.80) 
+
+Restrain_train <- training(Restrain_split)
+Restrain_test <- testing(Restrain_split)
+```
+
+
+## Naive Bayes 
+
+```{r}
+#| label: naive bayes model
+
+```
+
+```{r}
+#| label: fit naive bayes model
+
+```
+
+1. What assumptions are made about the joint pdf $f_k(\text{Taste}, \text{Healthiness}, \text{Cravings})$ within each group when we run naive Bayes with multiple predictor variables?
+
+2. What does `$apriori` represent?
+
+3. What is this `density.default(x = xx)` and why is it getting called?
+
+Since naive Bayes already works with the joint pdf/pmf $f_k(x)$, we don't need to scale any variables.
+
+```{r}
+#| label: augment nb model
+predictions_nb_df <- nb_fit |>
+  broom::augment(new_data = Restrain_test)
+predictions_nb_df |>
+  dplyr::select(
+  Food,
+  SubCategory, 
+  .pred_class, 
+  .pred_savory, 
+  .pred_sweet,
+  .pred_takeout,
+  everything()) # everything else at the end
+```
+
+We can look at a confusion matrix to see where the problems are:
+
+```{r}
+#| label: confusion matrix naive bayes
+
+conf_mat(
+  predictions_nb_df,
+  truth = SubCategory,
+  estimate = .pred_class
+)
+```
+
+It perhaps shouldn't be surprising that savory foods are consistently misclassified, considering they had the lowest prior probability and that these three variables aren't enough to separate them out from the other two clases.
+
+There are a couple of weird things when running naive Bayes with tidymodels:
+
+- Categorical predictors *must* be expressed as factor variables; do not use indicator variables or character/string variables.
+- The `discrim` package is required to fit this model.
+
+## Linear Discriminant Analysis
+
+1. What assumptions are made about the joint pdf $f_k(\text{Taste}, \text{Healthiness}, \text{Cravings})$ within each group when we run linear discriminant analysis (LDA) with multiple predictor variables?
+
+The `discrim` package is also required to fit this model.
+
+Since we have only numerical predictors, we don't have to do any pre-processing in our recipe. If we had categorical predictors, we would have to convert them to indicator variables using `step_dummy()`.
+
+```{r}
+#| label: create lda model
+
+```
+
+```{r}
+#| label: fit and predict LDA
+
+```
+
+
+2. Briefly explain what each of the following mean:
+
+- Prior probabilities of groups
+- Group means
+- Coefficients of linear discriminants
+
+3. Why are there two linear discriminants, `LD1` and `LD2`?
+
+To find the actual decision boundaries, we have to find the equations of the lines orthogonal to the lines going through each pair of sample means in the rotated (LD1, LD2) vector space. This gets a bit annoying with 3 response categories and significantly more annoying with more than 3:
+
+```{r}
+#| label: plot rotation 
+#| fig.asp: 1
+Restrain_original <- Restrain_train |>
+  dplyr::select(Taste, Healthiness, Cravings) |>
+  as.matrix() # convert to matrix form
+
+lda_multi <- lda_fit |>
+  extract_fit_engine()
+
+Restrain_rotated <- Restrain_original %*% lda_multi$scaling
+# Matches the values in the training set up to a constant offset
+
+Restrain_means <- Restrain_train |>
+  group_by(SubCategory) |>
+  summarize(Taste = mean(Taste),
+            Healthiness = mean(Healthiness),
+            Cravings = mean(Cravings)
+  ) |>
+  dplyr::select(Taste, Healthiness, Cravings) |>
+  as.matrix()
+
+Restrain_rotated_means <- Restrain_means %*% lda_multi$scaling
+
+lda_train_df <- Restrain_train |> 
+  bind_cols(Restrain_rotated)
+
+# constant offsets cancel out when subtracting the means
+lda_slopes <- c(
+  # savory vs sweet
+  (Restrain_rotated_means[1,2] - Restrain_rotated_means[2,2])/(Restrain_rotated_means[1,1] - Restrain_rotated_means[2,1]),
+  # savory vs takeout
+  (Restrain_rotated_means[1,2] - Restrain_rotated_means[3,2])/(Restrain_rotated_means[1,1] - Restrain_rotated_means[3,1]),
+  # sweet vs takeout
+    (Restrain_rotated_means[2,2] - Restrain_rotated_means[3,2])/(Restrain_rotated_means[2,1] - Restrain_rotated_means[3,1])
+)
+
+inv_slopes <- -1/lda_slopes
+
+midpoints_x <- c(mean(Restrain_rotated_means[c(1,2),1]),
+                 mean(Restrain_rotated_means[c(1,3),1]),
+                 mean(Restrain_rotated_means[c(2,3),1])
+                 )
+midpoints_y <- c(mean(Restrain_rotated_means[c(1,2),2]),
+                 mean(Restrain_rotated_means[c(1,3),2]),
+                 mean(Restrain_rotated_means[c(2,3),2])              
+                 )
+
+intercepts <- midpoints_y - inv_slopes*midpoints_x
+
+ggplot(lda_train_df, 
+       mapping = aes(x = LD1, y = LD2, color = SubCategory)) +
+  geom_point() + 
+  theme(legend.position = "bottom") + 
+  scale_color_manual(values = c("darkorange", "blue", "red")) + 
+  labs(title = "Linear Discriminant Analysis", 
+       x = "Discriminant 1 Value", 
+       y = "Discriminant 2 Value") +
+  geom_abline(intercept = intercepts, slope = inv_slopes) +
+  annotate("point", x = Restrain_rotated_means[,1], 
+           y = Restrain_rotated_means[,2], 
+           shape = 8, color = c("darkorange", "blue", "red"), 
+           size = 3) + 
+  annotate("text", 
+           x = c(3, 1.2, 0, -1, 0.4, 2), 
+           y = c(-9, -9, -9, -4, -4, -3.5), 
+           label = c("takeout", "takeout", "sweet", "sweet", "savory","savory"), 
+           color = c("red", "red", "blue", "blue", "darkorange","darkorange"))
+```
+
+1. What do each of the three lines on this graph represent?
+
+```{r}
+#| label: predict LDA
+
+```
+
+```{r}
+#| label: confusion matrix lda
+
+```
+
+### LDA with a Prior
+
+If we want to explicitly describe a prior distribution for the probability of an observation being in each class, we can use the `set_engine` function with the `prior` argument:
+
+```{r}
+#| label: LDA with a prior
+
+```
+
+```{r}
+#| label: fit and predict LDA with prior
+
+```
+
+
+## Quadratic Discriminant Analysis
+
+1. What is the major assumption in LDA that is *not* made in QDA?
+
+Literally the only coding difference from LDA is that we use `discrim_quad` instead of `discrim_linear`. There are a few extra alternative packages that will fit LDA but not QDA, but generally we're just going to use the MASS package for both.
+
+Since we have only numerical predictors, we don't have to do any pre-processing in our recipe.
+
+```{r}
+#| label: QDA with tidymodels
+
+```
+
+```{r}
+#| label: fit model
+
+```
+
+```{r}
+#| label: QDA predictions
+
+```
+
+```{r}
+#| label: confusion matrix qda
+
+```
+
+## Comparing LDA and QDA
+
+1. Consider the bias-variance tradeoff. Which of LDA and QDA tends to have the higher bias? Which tends to have the higher variance? Why?
+
+```{r}
+#| label: compare LDA and QDA
+# partimat is from the klaR package and provides a
+# visualization showing the decision boundaries
+
+```
+
+2. Compare the shapes of the estimated decision boundaries in the plots above. For what kinds of decision boundaries would you expect LDA to perform better than QDA? For what kinds of decision boundaries would you expect QDA to perform better than LDA?
+
+```{r}
+#| label: compare based on priors
+
+```
+
+3. How does changing the prior change the decision boundary?

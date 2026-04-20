@@ -206,7 +206,7 @@ table(augmented_cereal$.cluster)
 
 augmented_cereal |>
   filter(.cluster == 4) |>   # change to whichever is smallest
-  select(Cereal.Name,
+  select(Cereal.Abb,
          Total.Fat,
          Sugar,
          Protein,
@@ -399,7 +399,7 @@ table(KMeans, Mclust)
 augmented_cereal_sequel |>
   filter(.cluster == .class) |>
   arrange(.cluster) |>
-  select(Cereal.Name,
+  select(Cereal.Abb,
          .cluster,
          .class,
          Total.Fat,
@@ -412,6 +412,7 @@ augmented_cereal_sequel |>
 
 This table is crazy. I will try my best to interpret. I believe agreeance, for lack of better vocab, is seen in the diagonal, it just makes sense. Based on the 0's in Mclusts 2-4, I believe KMeans and Mclust completely agree on Cluster 1. In cluster 2 they agree on 28 observations, but disagree with a total of 26 obs. As we continue looking at it that way, we see they agree on 42 observations being in the same clusters, and disagree on 46. The two models do NOT mostly agree, in fact, they mostly disagree.
 
-For lack of proper wording, basically I filtered it so .cluster (KMeans) and .class (Mclust) are equal then arranged in order for better viewing. The agreed cluster 1 is cereals that are fiberous. The agreed cluster 2 is cereals that are sugary. The agreed cluster 3 is Special K cereals, both fatty, maybe good fat, and sugary and. The agreed cluster 4 is 1 montrous cereal. A beast beyond human morals. The FAT, SUGAROUS, HORRIFIC, Nutter Butter Cereal may God help us all.
+For lack of proper wording, basically I filtered it so .cluster (KMeans) and .class (Mclust) are equal then arranged in order for better viewing. The agreed cluster 1 is healthier cereals that are fiberous and protein filled. The agreed cluster 2 is cereals that are mainly sugary. The agreed cluster 3 is Special K cereals, both fatty, maybe good fat, and sugary and have 3 grams of protein. The agreed cluster 4 is 1 atrocity of a cereal. A beast beyond human morals. The FAT, SUGAROUS, HORRIFIC, and MONSTROUS, Nutter Butter Cereal may God help us all.
+
 In conclusion, they appear to agree on extremes, probably disagree on greys or middles.
 
