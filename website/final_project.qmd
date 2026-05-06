@@ -20,7 +20,7 @@ This section should include:
 #| message: false
 
 # change this to the location of your Quarto file containing your project; then delete this comment
-here::i_am("final_project.qmd")
+here::i_am("website/final_project.qmd")
 ```
 
 This section describes what you are investigating in your project and why you are investigating it. You should provide enough contextual background and information that someone with a limited background can understand the broad outlines of the topic being investigated.
@@ -39,6 +39,16 @@ library(readr)
 library(dplyr)
 library(ggplot2)
 library(rsample)
+library(tidymodels)
+library(broom)
+library(tidyverse)
+library(tidyclust)
+library(dendextend)
+library(factoextra)
+library(kknn)
+library(forcats)
+library(MASS)
+library(nnet)
 ```
 
 You should follow the template table below. Each row of the table contains the package name in brackets, a link to the package website, and (on the right side) a description of what you used the package for. If you can't find a link to the package website, or you're having trouble getting the link to work, don't worry about including it.
