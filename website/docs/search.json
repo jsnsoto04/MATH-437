@@ -1,0 +1,65 @@
+[
+  {
+    "objectID": "final_project.html",
+    "href": "final_project.html",
+    "title": "Final Project",
+    "section": "",
+    "text": "Remember to replace all of the instructions with your text!"
+  },
+  {
+    "objectID": "final_project.html#summary",
+    "href": "final_project.html#summary",
+    "title": "Final Project",
+    "section": "Summary",
+    "text": "Summary\nThis section should include:\n\nYour main question or objective\nThe main insight(s) from your project\nA figure that supplements that insight, along with accompanying text describing the figure. This figure can be a cleaned-up version of a visualization you produced in EDA or a visualization using your final model."
+  },
+  {
+    "objectID": "final_project.html#motivation-and-context",
+    "href": "final_project.html#motivation-and-context",
+    "title": "Final Project",
+    "section": "Motivation and Context",
+    "text": "Motivation and Context\nThis section describes what you are investigating in your project and why you are investigating it. You should provide enough contextual background and information that someone with a limited background can understand the broad outlines of the topic being investigated."
+  },
+  {
+    "objectID": "final_project.html#packages-used-in-this-analysis",
+    "href": "final_project.html#packages-used-in-this-analysis",
+    "title": "Final Project",
+    "section": "Packages Used In This Analysis",
+    "text": "Packages Used In This Analysis\nThis section lists the packages used in the analysis. You should have a single chunk that loads the packages followed by a description of why you are using each package. Please use individual package names rather than tidyverse and tidymodels, to make it clear which specific packages are being used.\n\nlibrary(here)\nlibrary(readr)\nlibrary(dplyr)\nlibrary(ggplot2)\nlibrary(rsample)\nlibrary(tidymodels)\nlibrary(broom)\nlibrary(tidyverse)\nlibrary(tidyclust)\nlibrary(dendextend)\nlibrary(factoextra)\nlibrary(kknn)\nlibrary(forcats)\nlibrary(MASS)\nlibrary(nnet)\n\nYou should follow the template table below. Each row of the table contains the package name in brackets, a link to the package website, and (on the right side) a description of what you used the package for. If you can’t find a link to the package website, or you’re having trouble getting the link to work, don’t worry about including it.\n\n\n\nPackage\nUse\n\n\n\n\nhere\nto easily load and save data\n\n\nreadr\nto import the CSV file data\n\n\ndplyr\nto massage and summarize data\n\n\nrsample\nto split data into training and test sets\n\n\nggplot2\nto create nice-looking and informative graphs"
+  },
+  {
+    "objectID": "final_project.html#data-description",
+    "href": "final_project.html#data-description",
+    "title": "Final Project",
+    "section": "Data Description",
+    "text": "Data Description\nThis section should describe the data that you are using, the source of the data (including a link if appropriate), and how the data was originally collected. You should be able to just clean up the Data Description section from Project 2.\nAt the end of the section you should import the data, unless it’s already in one of the packages you loaded."
+  },
+  {
+    "objectID": "final_project.html#data-wrangling-optional-section",
+    "href": "final_project.html#data-wrangling-optional-section",
+    "title": "Final Project",
+    "section": "Data Wrangling (Optional Section)",
+    "text": "Data Wrangling (Optional Section)\nIf you did any data wrangling on Project 2, include it here. If you are creating training and test sets for predictive modeling, you should also include that code in an appropriate place in this section."
+  },
+  {
+    "objectID": "final_project.html#exploratory-data-analysis",
+    "href": "final_project.html#exploratory-data-analysis",
+    "title": "Final Project",
+    "section": "Exploratory Data Analysis",
+    "text": "Exploratory Data Analysis\nThis section should include the code, figures, and accompanying text for the exploratory data analysis that is relevant to your objective. You should be able to just clean up the EDA section from Project 2."
+  },
+  {
+    "objectID": "final_project.html#modeling",
+    "href": "final_project.html#modeling",
+    "title": "Final Project",
+    "section": "Modeling",
+    "text": "Modeling\nThe section should include the code, output, and accompanying descriptions for one supervised or unsupervised learning model, as appropriate to your question or objective. The descriptions should include some conceptual or mathematical background explaining how the model works.\nYou should be able to just clean up one of the modeling sections from Project 2."
+  },
+  {
+    "objectID": "final_project.html#insightsconclusion",
+    "href": "final_project.html#insightsconclusion",
+    "title": "Final Project",
+    "section": "Insights/Conclusion",
+    "text": "Insights/Conclusion\nPick either “Insights” or “Conclusion” as the section title depending on what makes more sense.\nDescribe the primary findings from your EDA and modeling sections as appropriate to the main question/objective. You can reproduce the figure from your summary if that helps.\n\nLimitations and Future Work\nThis section should include further exploration of the limitations of your modeling approach. Some avenues of exploration include:\n\nWho/what is being poorly predicted by your model? Why?\nHow might someone improve the data collection or analysis in the future?\nAre the assumptions behind your analytical methods justified?\nAre there ethical concerns about how the data was collected or how the results of the analysis could be used in the real world?"
+  }
+]
