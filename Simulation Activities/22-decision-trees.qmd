@@ -1,0 +1,399 @@
+---
+title: "Activity: Decision Trees"
+subtitle: "Math 437"
+format: html
+editor: source
+---
+
+## Data
+
+Decision trees can be used for both regression and classification problems. For regression, we'll continue to use our Lahman baseball salary data. For classification, we'll use the RateMyProfessor data.
+
+```{r}
+#| label: load packages
+library(Lahman)
+library(rpart) # don't think we need this, but it's where decision tree algorithms are
+library(tidyverse)
+library(tidymodels)
+```
+
+```{r}
+#| label: load batting data
+salaries <- Salaries %>%
+  dplyr::select(playerID, yearID, teamID, salary)
+peopleInfo <- People %>%
+  dplyr::select(playerID, birthYear, birthMonth, nameLast,
+         nameFirst, bats)
+batting <- battingStats() %>% 
+  left_join(salaries, 
+            by =c("playerID", "yearID", "teamID")) %>%
+  left_join(peopleInfo, by = "playerID") %>%
+  mutate(age = yearID - birthYear - 
+           1L *(birthMonth >= 10)) %>%
+  arrange(playerID, yearID, stint)
+
+batting_2016 <- batting %>% filter(yearID == 2016,
+                                   !is.na(salary),
+                                   G >= 100, AB >= 200
+                                   ) %>%
+  mutate(salary = log10(salary), # there's a reason for this, I promise
+         lgID = factor(lgID, levels = c("AL", "NL"))) # fix the defunct league issue
+
+set.seed(11249)
+batting_2016_split <- initial_split(batting_2016, prop = 0.75)
+batting_train <- training(batting_2016_split)
+batting_test <- testing(batting_2016_split)
+```
+
+```{r}
+#| label: load RMP data
+RMP <- readr::read_csv(here::here("Data/RateMyProfessor.csv"))
+RMP$hotness <- factor(RMP$hotness, levels = c("hot", "cold"))
+RMP$rank <- factor(RMP$rank, 
+                   levels = c("Assistant Professor", "Associate Professor", "Professor"),
+                   labels = c("Asst", "Assoc", "Full"))
+set.seed(1880)
+RMP_split <- initial_split(RMP, prop = 0.80) 
+
+RMP_train <- training(RMP_split)
+RMP_test <- testing(RMP_split)
+```
+
+## Regression Trees
+
+1. Explain how a decision tree model works.
+
+When we create a decision tree, there are three parameters that we can tune:
+
+* `tree_depth` indicates the maximum depth of the tree - the default is 30
+* `min_n` determines whether a node is a terminal node (if there are fewer `min_n` observations at a node, then the node is a terminal node) - the default is 2
+* `cost_complexity` indicates the cost-complexity parameter for tree pruning - the default is 0.01
+
+Here we'll leave the first two parameters at their defaults and tune the cost-complexity parameter.
+
+2. Explain the idea behind cost-complexity pruning.
+
+Fit entire decision tree, then "prune"
+
+3. Explain the tuning of each parameter in terms of the bias-variance tradeoff.
+
+Higher tree depth, higher variance, lower depth, lower variance but higher bias.
+
+Higher min_n, higher bias, lower min_n, lower variance.
+
+```{r}
+#| label: regression tree model
+
+treeR_model <- decision_tree(
+  mode = "regression",     # classification or regression
+  engine = "rpart",     # use rpart package to fit the tree
+  cost_complexity = tune()     # tune this, but leave min_n and max_depth at default
+)
+
+```
+
+Pre-processing is a good idea but not strictly necessary here.
+
+```{r}
+#| label: regression tree recipe
+treeR_recipe <- recipe(
+  salary ~ G +  R + H + X2B + X3B + HR + RBI + 
+    SB + CS + BB + SO + IBB + HBP + SH + SF + GIDP + 
+    age + lgID, # response ~ predictors
+  data = batting_train
+)
+
+treeR_wflow <- workflow() |>
+  add_model(treeR_model) |>
+  add_recipe(treeR_recipe)
+```
+
+Now we can do the cross-validation. We'll use the `grid_regular` function to set up our grid again. If we wanted finer control over our grid, we'd use `expand.grid` to set up our grid manually.
+
+```{r}
+#| label: tune regression tree model
+
+set.seed(156)
+batting_kfold <- vfold_cv(batting_train,
+                          v = 5, repeats = 3)
+
+treeR_tune <- tune_grid(
+  treeR_wflow,
+  resamples = batting_kfold,
+  grid = grid_regular(
+    cost_complexity(range = c(-3, 0)),
+    levels = 10
+  ),
+  metrics = metric_set(rmse)     # warning message when using R^2
+)
+
+```
+
+Just like with penalized regression, the `range` argument is on the log10-scale; in other words, we are searching from $10^{-3}$ (very little pruning) to $10^0 = 1$. 
+
+```{r}
+#| label: collect and plot metrics
+
+autoplot(treeR_tune)
+
+```
+
+1. Suppose we are using the one-standard-error rule. Will smaller values of `cost_complexity` or larger values result in simpler models? Why?
+
+Larger value, higher bias, simpler model
+
+2. In my comments I said that we get a warning using R-squared. Recall that we get this warning when every observation is predicted to have the same value. In that case, what would the tree look like?
+
+```{r}
+#| label: select best tree
+
+treeR_best <- select_by_one_std_err(
+  treeR_tune,
+  metric = "rmse",
+  # how to sort based on tuning parameter(S)
+  desc(cost_complexity)
+)
+
+treeR_best
+
+```
+
+Now we finalize our workflow and look at how well calibrated the model is:
+
+```{r}
+#| label: finalize and fit tree
+
+treeR_wflow_final <- treeR_wflow |>
+  finalize_workflow(parameters = treeR_best)
+
+```
+
+```{r}
+#| label: investigate calibration of predictions
+# calibration: we want the predictions to be "on average" correct across the entire range of observed y.
+# traditionally for regression: observed y on x-axis, predicted y on y-axis, (ML doesn't abide by statistical standards)
+# we don't look at the test set, we use cross validation.
+
+treeR_pred_check <- treeR_wflow_final |>
+  fit_resamples(
+    resamples = batting_kfold,
+    control = control_resamples(
+      save_pred = TRUE     # store the predicted y-values
+    )
+  ) |>
+  collect_predictions()     # extract the predictions from the output
+
+treeR_pred_check |>
+  ggplot(
+    mapping = aes(x = salary, y = .pred)
+  ) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0)     # y = x line
+
+
+```
+
+Well, this certainly looks different from the linear regression models!
+
+3. Explain why we see this pattern - a bunch of horizontal bands - instead.
+
+Assuming we're okay with this somehow-worse-than-linear-regression calibration, we fit the model on the full training set:
+
+```{r}
+#| label: fit on full training set
+
+treeR_fit <- fit(treeR_wflow_final,
+                 data = batting_train)
+
+```
+
+and investigate what the model actually looks like:
+
+```{r}
+#| label: look at tree
+
+par(xpd = TRUE)     # makes it so that we can see the tree
+
+treeR_fit |>
+  extract_fit_engine() |>
+  plot()
+
+treeR_fit |>
+  extract_fit_engine() |>
+  text(use.n = TRUE)
+
+```
+
+3. Explain how to read this tree.
+
+We then make predictions on the holdout set:
+
+```{r}
+#| label: predict with decision tree
+
+```
+
+4. Explain why Javier Baez and Mookie Betts are predicted to have the same salary, even though Baez hit fewer than 14.5 home runs and Betts hit more than 14.5 home runs.
+
+## Classification Trees
+
+Because we already set up the decision tree model, we can just update it to do classification using `set_mode`:
+
+```{r}
+#| label: tree model for classification
+
+treeC_model <- treeR_model |> 
+  set_mode("classification")
+
+# Equivalent to:
+#treeC_model <- decision_tree(mode = "classification", engine = "rpart", cost_complexity = tune())
+# because we are still using rpart and tuning the cost-complexity parameter
+
+```
+
+Pre-processing is a good idea but not strictly necessary here. Remember that we are using entirely different data to do entirely different predictions, so we do have to set up the new recipe.
+
+```{r}
+#| label: new recipe for classification
+treeC_recipe <- recipe(
+  hotness ~ scientific_age + gender + 
+    interest + uni_control + 
+    mentions_accent + discipline + uni_type,  
+  data = RMP_train
+  )
+
+treeC_wflow <- workflow() |>
+  add_model(treeC_model) |>
+  add_recipe(treeC_recipe)
+```
+
+Now we can do the cross-validation. Traditionally, mean log-loss is used to choose the best decision tree model, so we'll look at that.
+
+```{r}
+#| label: tune classification model
+
+set.seed(1332)
+RMP_kfold <- vfold_cv(RMP_train, v = 5, repeats = 3) 
+treeC_tune1 <- tune_grid(treeC_model, 
+                      treeC_recipe, 
+                      resamples = RMP_kfold, 
+                      metrics = metric_set(mn_log_loss),
+                      grid = grid_regular(cost_complexity(range = c(-5, -1)), levels = 17)) # 4 at each power of 10
+
+autoplot(treeC_tune1)
+
+```
+
+1. Explain how to read this graph.
+
+```{r}
+#| label: select best by 1SE classification
+
+treeC_best <- select_by_one_std_err(
+  treeC_tune1,
+  metric = "mn_log_loss",
+  desc(cost_complexity)
+)
+treeC_best
+
+```
+
+Now we finalize our workflow and fit the model on the training set:
+
+```{r}
+#| label: fit classification model
+
+treeC_wflow_final <- finalize_workflow(
+  treeC_wflow, 
+  parameters = treeC_best
+  ) 
+
+treeC_fit <- fit(treeC_wflow_final, data = RMP_train)
+treeC_fit
+
+```
+
+```{r}
+#| label: look at classification tree
+
+par(xpd = TRUE) # otherwise things clip
+extract_fit_engine(treeC_fit) |>
+  plot(compress = TRUE, margin = 0, uniform = TRUE) 
+# uniform = TRUE makes the tree drawing more uniform
+# helps to space out the text issues
+
+extract_fit_engine(treeC_fit) |>
+  text(use.n = TRUE, minlength = 4, cex = 0.75)
+# cex = 0.75 puts text at 3/4 size for readability
+
+```
+
+2. Explain how to read this tree.
+
+```{r}
+#| label: augment classification tree
+
+broom::augment(treeC_fit, new_data = RMP_test) |>
+  conf_mat(truth = hotness, estimate = .pred_clas
+
+```
+
+### Multiclass Classification
+
+```{r}
+#| label: multiclass classification tree
+treeMC_recipe <- recipe(
+  rank ~ scientific_age + gender + race + uni_control + mentions_accent + discipline + uni_type,  
+  data = RMP_train
+)
+
+treeMC_wflow <- workflow() |>
+  add_model(treeC_model) |>
+  add_recipe(treeMC_recipe)
+```
+
+```{r}
+#| label: tune multiclass tree model
+
+treeMC_tune <- tune_grid(treeC_model, 
+                      treeMC_recipe, 
+                      resamples = RMP_kfold, 
+                      metrics = metric_set(mn_log_loss),
+                      grid = grid_regular(cost_complexity(range = c(-5, -1)), levels = 17))
+
+autoplot(treeMC_tune)
+
+```
+
+```{r}
+#| label: select best multiclass tree model
+
+treeMC_best <- select_by_one_std_err(
+  treeMC_tune,
+  metric = "mn_log_loss",
+  desc(cost_complexity)
+)
+treeMC_best
+
+```
+
+```{r}
+#| label: fit best multiclass model
+
+treeMC_wflow_final <- finalize_workflow(
+  treeMC_wflow, 
+  parameters = treeMC_best
+  ) 
+
+treeMC_fit <- fit(treeMC_wflow_final, 
+                  data = RMP_train)
+
+par(xpd = TRUE)
+extract_fit_engine(treeMC_fit) |>
+  plot(uniform = TRUE)
+extract_fit_engine(treeMC_fit) |>
+  text(use.n = TRUE, minlength = 4, cex = 0.75)
+
+```
+
+3. Explain how to read this tree. Why are there so many `scientific_age` splits?

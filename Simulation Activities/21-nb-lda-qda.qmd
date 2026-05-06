@@ -47,10 +47,38 @@ Restrain_test <- testing(Restrain_split)
 ```{r}
 #| label: naive bayes model
 
+nb_model <- naive_Bayes(
+  mode = "classification",
+  engine = "klaR"
+  # both are defaults
+)
+
+nb_recipe <- recipe(
+  SubCategory ~ Taste + Cravings + Healthiness,
+  data = Restrain_train
+)
+# Requires factor variables of categorical - NO DUMMY VARIABLES!
+
+nb_wflow <- workflow() |>
+  add_model(nb_model) |>
+  add_recipe(nb_recipe)
+
 ```
 
 ```{r}
 #| label: fit naive bayes model
+
+nb_fit <- nb_wflow |>
+  fit(data = Restrain_train)
+
+nb_fit
+
+# NOT actually part of fitting the model
+Restrain_train |>
+  group_by(SubCategory) |>
+  count() |>
+  ungroup() |>
+  mutate(pct = n/sum(n))
 
 ```
 
@@ -93,6 +121,8 @@ It perhaps shouldn't be surprising that savory foods are consistently misclassif
 
 There are a couple of weird things when running naive Bayes with tidymodels:
 
+NOTE FOR LAB 10!!! NB PROBLEM 2
+
 - Categorical predictors *must* be expressed as factor variables; do not use indicator variables or character/string variables.
 - The `discrim` package is required to fit this model.
 
@@ -107,10 +137,27 @@ Since we have only numerical predictors, we don't have to do any pre-processing 
 ```{r}
 #| label: create lda model
 
+lda_model <- discrim_linear(
+  mode = "classification",      # default
+  engine = "MASS"     # default
+)
+
+lda_wflow <- workflow() |>
+  add_model(lda_model) |>
+  add_recipe(nb_recipe)
+
 ```
 
 ```{r}
 #| label: fit and predict LDA
+
+lda_fit <- lda_wflow |>
+  fit(data = Restrain_train)
+
+lda_fit
+
+lda_predict <- lda_fit |>
+  augment(new_data = Restrain_test)
 
 ```
 
@@ -118,8 +165,13 @@ Since we have only numerical predictors, we don't have to do any pre-processing 
 2. Briefly explain what each of the following mean:
 
 - Prior probabilities of groups
+Proportion in each group from data
+
 - Group means
+Mean vectors
+
 - Coefficients of linear discriminants
+
 
 3. Why are there two linear discriminants, `LD1` and `LD2`?
 
@@ -197,6 +249,8 @@ ggplot(lda_train_df,
 
 1. What do each of the three lines on this graph represent?
 
+Predict one class against another
+
 ```{r}
 #| label: predict LDA
 
@@ -204,6 +258,12 @@ ggplot(lda_train_df,
 
 ```{r}
 #| label: confusion matrix lda
+
+lda_predict |>
+  conf_mat(
+    truth = SubCategory,
+    estimate = .pred_class
+  )
 
 ```
 
@@ -214,10 +274,32 @@ If we want to explicitly describe a prior distribution for the probability of an
 ```{r}
 #| label: LDA with a prior
 
+lda_prior <- discrim_linear(
+  mode = "classification"
+) |>
+  set_engine(
+    engine = "MASS",
+    prior = c(1/3, 1/3, 1/3)     # equally likely classes
+  )
+
+lda_prior_wflow <- workflow() |>
+  add_model(lda_prior) |>
+  add_recipe(nb_recipe)
+
+
 ```
 
 ```{r}
 #| label: fit and predict LDA with prior
+
+lda_prior_fit <- lda_prior_wflow |>
+  fit(data = Restrain_train)
+
+lda_prior_predictions <- lda_prior_fit |>
+  augment(new_data = Restrain_test)
+
+lda_prior_predictions |>
+  conf_mat(truth = SubCategory, estimate = .pred_class)
 
 ```
 
@@ -233,20 +315,38 @@ Since we have only numerical predictors, we don't have to do any pre-processing 
 ```{r}
 #| label: QDA with tidymodels
 
+qda_model <- discrim_quad(
+  mode = "classification"
+) |>
+  set_engine("MASS")
+
+qda_wflow <- workflow() |>
+  add_model(qda_model) |>
+  add_recipe(nb_recipe)
+
 ```
 
 ```{r}
 #| label: fit model
+
+qda_fit <- fit(qda_wflow, data = Restrain_train)
+qda_fit
 
 ```
 
 ```{r}
 #| label: QDA predictions
 
+qda_predict <- qda_fit |>
+  augment(new_data = Restrain_test)
+
 ```
 
 ```{r}
 #| label: confusion matrix qda
+
+qda_predict |>
+  conf_mat(truth = SubCategory, estimate = .pred_class)
 
 ```
 
@@ -258,6 +358,24 @@ Since we have only numerical predictors, we don't have to do any pre-processing 
 #| label: compare LDA and QDA
 # partimat is from the klaR package and provides a
 # visualization showing the decision boundaries
+
+partimat(
+  SubCategory ~ Taste + Cravings + Healthiness,
+  data = Restrain_train,
+  method = "lda",
+  main = "LDA",     # Title of plot
+  nplots.hor = 3,     # 3 plots arranged horizontally
+  gs = c("S", "W", "T")     # Savory, sWeet, Takeout
+)
+
+partimat(
+  SubCategory ~ Taste + Cravings + Healthiness,
+  data = Restrain_train,
+  method = "qda",
+  main = "QDA",     # Title of plot
+  nplots.hor = 3,     # 3 plots arranged horizontally
+  gs = c("S", "W", "T")     # Savory, sWeet, Takeout
+)
 
 ```
 

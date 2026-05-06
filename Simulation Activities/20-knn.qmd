@@ -41,7 +41,14 @@ Restrain_test2 <- testing(Restrain_split)
 The model to run k-nearest neighbors is `nearest_neighbor`. Because k-nearest neighbors works with both regression and classification, we must specify the mode. We must also specify the number of neighbors to choose.
 
 ```{r}
-#| label: knn model
+#| label: knn 
+
+K <- 10     # 10-nearest neighbors
+knn_model <- nearest_neighbor(
+  mode = "classification",
+  neighbors = K,
+  dist_power = 2
+)
 
 ```
 
@@ -49,6 +56,13 @@ The model to run k-nearest neighbors is `nearest_neighbor`. Because k-nearest ne
 
 ```{r}
 #| label: knn recipe
+
+knn_recipe <- recipe(
+  SubCategory ~ Taste + Cravings + Healthiness,
+  data = Restrain_train2
+) |>
+  step_normalize(all_numeric_predictors()) #|>
+# step_dummy(all_nominal_predictors())
 
 ```
 
@@ -58,6 +72,15 @@ The model to run k-nearest neighbors is `nearest_neighbor`. Because k-nearest ne
 
 ```{r}
 #| label: fit knn
+
+knn_wflow <- workflow() |>
+  add_model(knn_model) |>
+  add_recipe(knn_recipe)
+
+knn_fit <- knn_wflow |>
+  fit(data = Restrain_train2)
+
+knn_fit
 
 ```
 
@@ -70,10 +93,20 @@ As usual, we use the `predict` function to make predictions:
 ```{r}
 #| label: make predictions on test set
 
+knn_predictions <- knn_fit |>
+  predict(new_data = Restrain_test2)
+
+knn_predictions
+
 ```
 
 ```{r}
 #| label: probabilistic predictions
+
+knn_predictions <- knn_fit |>
+  predict(new_data = Restrain_test2, type = "prob")
+
+knn_predictions
 
 ```
 
@@ -84,14 +117,37 @@ We can also use `augment` to add the predictions to the original data frame:
 ```{r}
 #| label: predict with augment
 
+knn_predictions_df <- knn_fit |>
+  augment(new_data = Restrain_test2)
+
+knn_predictions_df |>
+  dplyr::select(
+    Food,
+    SubCategory,
+    .pred_class,
+    .pred_savory,
+    .pred_sweet,
+    .pred_takeout,
+    everything()
+  ) |>
+  slice(51:54)
+
 ```
 
 2. Explain why the "Filet-o-Fish" (row 52) is predicted to be sweet. 
+
+Highest Probability
 
 We can obtain the confusion matrix and see what categories get confused with each other:
 
 ```{r}
 #| label: confusion matrix
+
+knn_predictions_df |>
+  conf_mat(
+    truth = SubCategory,
+    estimate = .pred_class
+  )
 
 ```
 
@@ -103,17 +159,30 @@ Remember that we tune hyperparameters using cross-validation. Here we'll use rep
 
 ```{r}
 #| label: k-fold cv setup
+
 set.seed(145)
-fv_kfold <- vfold_cv(Restrain_train2,
+
+Restrain_kfold <- vfold_cv(Restrain_train2,
                      v = 5, repeats = 2,
                      strata = SubCategory) 
-fv_kfold
+Restrain_kfold
+
 ```
 
 Here we'll tune both the number of nearest neighbors and the distance power.
 
 ```{r}
 #| label: knn with tuning
+
+knn_model_tune <- nearest_neighbor(
+  mode = "classification",
+  neighbors = tune(),
+  dist_power = tune()
+)
+
+knn_params <- extract_parameter_set_dials(knn_model_tune)
+
+knn_params
 
 ```
 
@@ -122,10 +191,21 @@ Let's set up our search grid using `expand.grid`:
 ```{r}
 #| label: set up parameter grid
 
+knn_param_grid <- expand.grid(
+  neighbors = seq(2, 62, by = 10),
+  dist_power = c(1, 2, 5)
+)
+
+knn_param_grid
+
 ```
 
 ```{r}
 #| label: workflow to tune
+
+knn_wflow_tune <- workflow() |>
+  add_model(knn_model_tune) |>
+  add_recipe(knn_recipe)
 
 ```
 
@@ -134,12 +214,21 @@ Recall that we search over the entire grid using `tune_grid`:
 ```{r}
 #| label: tune knn model
 
+knn_tune <- knn_wflow_tune |>
+  tune_grid(
+    resamples = Restrain_kfold,
+    grid = knn_param_grid,
+    metrics = metric_set(roc_auc, brier_class, mn_log_loss)
+  )
+
 ```
 
 1. Explain the choice of `k` in terms of the bias-variance tradeoff.
 
 ```{r}
 #| label: investigate tuning results
+
+autoplot(knn_tune)
 
 ```
 
@@ -182,6 +271,31 @@ ggplot(knn_metric_avg,
 
 ```{r}
 #| label: fit and predict final model
+
+knn_model_final <- nearest_neighbor(
+  mode = "classification",
+  neighbors = 22,     # hard coded instead of select best is done here
+  dist_power = 2
+)
+
+knn_wflow_final <- workflow() |>
+  add_model(knn_model_final) |>
+  add_recipe(knn_recipe)
+
+knn_fit_tuned <- fit(knn_wflow_final,
+                     data = Restrain_train2)
+
+knn_predictions_df_tuned <- knn_fit_tuned |>
+  augment(new_data = Restrain_test2)
+
+conf_mat(
+  knn_predictions_df_tuned,
+  truth = SubCategory,
+  estimate = .pred_class
+)     # some takeout food was confused for fruit or veggie, lets see what it was
+
+knn_predictions_df_tuned |>
+  filter(SubCategory == "takeout", .pred_class == "fruit_veggie")
 
 ```
 

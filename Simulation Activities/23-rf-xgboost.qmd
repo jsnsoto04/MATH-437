@@ -1,0 +1,635 @@
+---
+title: "Activity: Ensembles of Decision Trees"
+subtitle: "Math 437"
+format: html
+editor: source
+---
+
+## Data
+
+For regression, we'll continue to use our Lahman baseball salary data. For classification, we'll use the RateMyProfessor data.
+
+```{r}
+#| label: load packages
+library(Lahman)
+library(tidyverse)
+library(tidymodels)
+library(randomForest) # for book labs
+library(ranger) # for these examples
+library(gbm) # for book labs
+library(xgboost) # what people actually use
+library(vip) # variable importance plot
+```
+
+```{r}
+#| label: load batting data
+salaries <- Salaries %>%
+  dplyr::select(playerID, yearID, teamID, salary)
+peopleInfo <- People %>%
+  dplyr::select(playerID, birthYear, birthMonth, nameLast,
+         nameFirst, bats)
+batting <- battingStats() %>% 
+  left_join(salaries, 
+            by =c("playerID", "yearID", "teamID")) %>%
+  left_join(peopleInfo, by = "playerID") %>%
+  mutate(age = yearID - birthYear - 
+           1L *(birthMonth >= 10)) %>%
+  arrange(playerID, yearID, stint)
+
+batting_2016 <- batting %>% filter(yearID == 2016,
+                                   !is.na(salary),
+                                   G >= 100, AB >= 200
+                                   ) %>%
+  mutate(salary = log10(salary), # there's a reason for this, I promise
+         lgID = factor(lgID, levels = c("AL", "NL"))) # fix the defunct league issue
+
+set.seed(11249, kind = "Mersenne-Twister")
+batting_2016_split <- initial_split(batting_2016, prop = 0.75)
+batting_train <- training(batting_2016_split)
+batting_test <- testing(batting_2016_split)
+# set up kfold CV here
+batting_kfold <- vfold_cv(batting_train, v = 5, repeats = 3) 
+```
+
+```{r}
+#| label: load RMP data
+RMP <- readr::read_csv(here::here("Data/RateMyProfessor.csv"))
+RMP$hotness <- factor(RMP$hotness, levels = c("hot", "cold"))
+RMP$rank <- factor(RMP$rank, 
+                   levels = c("Assistant Professor", "Associate Professor", "Professor"),
+                   labels = c("Asst", "Assoc", "Full"))
+set.seed(1880, kind = "Mersenne-Twister")
+RMP_split <- initial_split(RMP, prop = 0.80) 
+
+RMP_train <- training(RMP_split)
+RMP_test <- testing(RMP_split)
+# set up kfold CV here
+RMP_kfold <- vfold_cv(RMP_train, v = 5, repeats = 3)
+```
+
+
+## Bagging and Random Forests(TM)
+
+Decision trees are great for interpretability but not great for prediction, mostly because they are incredibly high-variance. However, recall that in general we can reduce variance by averaging. This means that if we grow a whole bunch of terrible high-variance trees in parallel and average their predictions, we can reduce variance while not affecting bias much.
+
+We generally have two options for growing trees in parallel: bagging and random forests. The default tidymodels engine for both methods is  the `ranger` package. However, there is also an option to use the `randomForest` package, which is what the book uses. There are a few minor differences in terms of what comes out of the model, but generally, just pick one and `set_engine` to that one.
+
+### Understanding the Algorithm
+
+1. If we fit 500 decision trees on the same training set, we will get 500 of the same exact tree. How do we ensure the trees are different?
+
+There are three parameters that we can tune:
+
+* `trees` indicates the number of trees to fit - the default is 500
+* `mtry` indicates the number of predictors that will be randomly selected at each split - the default varies between engines
+* `min_n` determines whether a node is a terminal node (if there are fewer `min_n` observations at a node, then the node is a terminal node) - the default is 5 for regression and 10 for classification
+
+The main difference between random forests and bagging is in `mtry`: for bagging, we explicitly set `mtry` to the number of predictors in the dataset, while for random forests, we tune the value of `mtry`. 
+
+2. Why might tuning the value of `mtry` and not using every predictor on every split result in better predictions?
+
+### Bagging for Regression
+
+The model for bagging and random forests is `rand_forest`. Because we are doing some bootstrapping, we need to set a seed for reproducibility. We will set this using the `set_args` function so that it carries through into the actual model fitting.
+
+```{r}
+#| label: baggingR model
+
+baggingR_model <- rand_forest(
+  mode = "regression",
+  engine = "ranger"
+) |>
+  set_args(
+    seed = 121,     # set INSIDE set_args
+    mtry = .cols(),     # use every predictor
+    importance = "permutation"
+  )
+
+# you can use .cols() or .preds(); .preds() works before dummy variables are created and .cols() works afterwards
+
+```
+
+1. Explain what `importance = "permutation"` means.
+
+```{r}
+#| label: recipe for baggingR
+baggingR_recipe <- recipe(
+  salary ~ G +  R + H + X2B + X3B + HR + RBI +
+    SB + CS + BB + SO + IBB + HBP + SH + SF + GIDP +
+    age + lgID, # response ~ predictors
+  data = batting_train
+)
+
+baggingR_wflow <- workflow() |>
+  add_model(baggingR_model) |>
+  add_recipe(baggingR_recipe)
+```
+
+Since we have not tuned anything, and decision trees rarely require pre-processing, we can go straight to fitting:
+
+```{r}
+#| label: fit baggingR model
+
+baggingR_fit <- baggingR_wflow |>
+  fit(data = batting_train)
+
+baggingR_fit
+
+```
+
+```{r}
+#| label: out-of-bag prediction error for baggingR
+
+baggingR_engine <- baggingR_fit |> extract_fit_engine()
+
+baggingR_engine |>
+  pluck("prediction.error")
+
+```
+
+2. What is OOB prediction error and how is it computed?
+
+For each obs in training set, find all trees for which this obs is NOT in the bootstrap sample.
+(Should be 30%-40% of trees)
+Predict y_hat using ONLY these trees.
+Calculate MSE using these y_hat values.
+
+Let's look at our calibration plot:
+
+```{r}
+#| label: calibration on training data baggingR
+
+baggingR_pred_check <- tibble(
+  salary = batting_train$salary,
+  .pred = baggingR_engine |> pluck("predictions")
+)
+
+ggplot(
+  data = baggingR_pred_check,
+  mapping = aes(x = salary, y = .pred)
+) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0)     # y = x line
+
+```
+
+3. How are these predictions made? Why do we know the predicted values despite not doing any cross-validation?
+
+Bagging can be useful for feature selection; we can use a variable importance plot to identify the most "important" variables.
+
+```{r}
+#| label: variable importance plot for baggingR
+
+baggingR_engine |>
+  pluck("variable.importance")
+
+vip(baggingR_engine)
+
+```
+
+4. What does a negative value for variable importance in this model mean?
+
+Often the actual importance is not that important; what we're looking at is the *relative* importance. We can get this on the variable importance plot automatically by changing the `scale` argument to make the longest bar go out to 100:
+
+```{r}
+#| label: relative importance for baggingR
+
+vip(baggingR_engine, scale = TRUE)
+# Scales all to most important predicton 
+
+```
+
+Finally we make and evaluate our predictions on the test set:
+
+```{r}
+#| label: augment baggingR
+
+baggingR_preds <- baggingR_fit |>
+  augment(new_data = batting_test) |>
+  dplyr::select(
+    nameFirst, nameLast, salary, .pred
+  )
+
+head(baggingR_preds)
+
+rmse(baggingR_preds, truth = salary, estimate = .pred)
+# rmse, not mse, so need to square to compare
+
+```
+
+Notice that this is RMSE, and the out-of-bag prediction error was reported as MSE, so we have to transform one of them to compare the two directly. We should find that the out-of-bag prediction error is slightly lower.
+
+### Random Forests for Regression
+
+If we want to use random forests, then we just need to tune the value of `mtry` instead of set it to the number of predictors. We'll use `update` to tell R that we want to slightly alter the bagging model.
+
+```{r}
+#| label: update baggingR for RF
+
+rfR_model <- update(baggingR_model, mtry = tune())
+
+rfR_wflow <- workflow() |>
+  add_model(rfR_model) |>
+  add_recipe(baggingR_recipe)
+
+```
+
+Now we do have to tune the model:
+
+```{r}
+#| label: tune rfR model
+
+n_predictors <- sum(baggingR_recipe$var_info$role == "predictor")
+
+rfR_grid <- expand.grid(mtry = seq(1, n_predictors))
+# maybe thin this out a bit if you have a ton of predictors
+
+rfR_tune <- tune_grid(
+  rfR_wflow,
+  grid = rfR_grid,
+  resamples = batting_kfold,
+  metrics = metric_set(rmse)
+)
+
+```
+
+```{r}
+#| label: investigate cv results rfR
+
+autoplot(rfR_tune)
+
+```
+
+
+1. Do you expect the models with a smaller or larger value of `mtry` to take longer to fit? Why?
+
+```{r}
+#| label: select best rfR model
+
+rfR_final <- select_by_one_std_err(
+  rfR_tune,
+  metric = "rmse",
+  mtry
+)
+
+rfR_final
+
+```
+
+Now we finalize our workflow and fit the model on the training set:
+
+```{r}
+#| label: fit final rfR model
+
+rfR_wflow_final <- rfR_wflow |>
+  finalize_workflow(parameters = rfR_final)
+
+rfR_fit <- fit(rfR_wflow_final, data = batting_train)
+
+```
+
+We still like to get the out-of-bag prediction error and look at the model calibration and variable importance:
+
+```{r}
+#| label: investigate OOB predictions
+
+rfR_fit |>
+  extract_fit_engine() |>
+  pluck("prediction.error")
+
+```
+
+Again, note that the bootstrap is doing the work of making out-of-sample predictions, rather than cross-validation.
+
+```{r}
+#| label: relative importance plot rfR
+
+vip(extract_fit_engine(rfR_fit), scale = TRUE)
+
+```
+
+2. Compare the variable importance plot for the bagging model to the variable importance plot for the random forest model. Why do you think some variables have quite different importance in the two models?
+
+### Bagging and Random Forests for Classification
+
+```{r}
+#| label: rf for classification
+rfC_model <- rand_forest(
+  mode = "classification", 
+  engine = "ranger"
+  ) |>
+  set_args(seed = 395,
+           importance = "permutation",
+           mtry = tune()
+  )
+```
+
+
+```{r}
+#| label: RMP classification recipe
+rfC_recipe <- recipe(
+hotness ~ scientific_age + gender + interest + 
+  uni_control + mentions_accent + discipline + uni_type,  
+  data = RMP_train
+)
+
+
+rfC_wflow <- workflow() |>
+  add_model(rfC_model) |>
+  add_recipe(rfC_recipe)
+```
+
+Now we tune the model:
+
+```{r}
+#| label: tune rfC model
+# I'm sure there's a better way, but this works
+n_predictorsC <- sum(rfC_recipe$var_info$role == "predictor")
+manual_gridC <- expand.grid(mtry = seq(1, n_predictorsC))
+
+rfC_tune1 <- tune_grid(rfC_model, 
+                      rfC_recipe, 
+                      resamples = RMP_kfold, 
+                      metrics = metric_set(mn_log_loss, accuracy),
+                      grid = manual_gridC)
+
+```
+
+```{r}
+#| label: investigate tuning results rfC
+autoplot(rfC_tune1)
+```
+
+
+Here it looks like considering two predictors maximizes cross-validated accuracy and minimizes mean log-loss.
+
+```{r}
+#| label: select best rfC model
+rfC_best <- select_best(
+  rfC_tune1,
+  metric = "mn_log_loss"
+)
+
+rfC_best
+
+```
+
+Now we finalize our workflow and fit the model on the training set:
+
+```{r}
+#| label: fit best rfC model
+rfC_wflow_final <- finalize_workflow(rfC_wflow, parameters = rfC_best) 
+rfC_fit <- fit(rfC_wflow_final, data = RMP_train)
+rfC_fit
+```
+
+1. What classification accuracy metric is being used to evaluate the OOB prediction error for a classification model with `ranger`?
+
+```{r}
+#| label: plot OOB brier score and vip for rfC
+rfC_engine <- rfC_fit |> extract_fit_engine()
+
+rfC_engine |> pluck("prediction.error")
+
+vip(rfC_engine, scale = TRUE)
+
+```
+
+### Bagging for Missing Data Imputation
+
+Decision trees deal with missing predictor values just fine, but since they are extremely high-variance, we typically don't want to impute missing data using a single tree. Bagging is generally preferred to random forests for missing data imputation.
+
+The function for imputing with bagging in tidymodels is `step_impute_bag()`. You prep and bake the imputation just like we did with `step_impute_linear()` in the Missing Data activity.
+
+The recipe step ` step_impute_bag(all_predictors(), impute_with = imp_vars(all_predictors()))` will impute all of the missing predictor data at once.
+
+## Boosted Trees
+
+Rather than growing trees in parallel, boosting models grow trees in series, with each new tree being fit on the previous tree's errors.
+
+There are many different packages that run their own variants of gradient-boosted trees. As far as I am aware, the most popular version for a while has been the `xgboost` (eXtreme Gradient BOOSTing) algorithm, which is implemented in a number of languages including R and Python. We'll use the `tidymodels` interface to `xgboost`.
+
+### Parameters to Tune in `xgboost`
+
+There are 8 tunable parameters. The ones we aren't going to worry about:
+
+* `mtry` indicates the number of predictors that will be randomly selected at each split - the default is to use all the predictors, but if you have a ton of predictors you may want to tune this.
+* `min_n` and `loss_reduction` jointly determine whether a node is a terminal node - if the number of observations at a node is below `min_n`, or all possible splits decrease the loss function by less than `loss_reduction`, the node is a terminal node. The default for `min_n` is 1 and the default for `loss_reduction` is 0. Larger values will give more conservative models.
+* `sample_size` is the proportion of observations available to be selected each time a new tree is fit. See the *Stochastic Gradient Descent* section of my course notes.
+* `stop_iter` governs what happens if the model gets stuck in a rut - if the model does not improve after `stop_iter` number of iterations, the fitting process stops even if not all the trees have been fit
+
+The ones we care about:
+
+* `trees` indicates the number of trees to fit, or in other words, the number of iterations to run the model for - the default is 15. This should almost always be tuned because when this value is too large we tend to overfit.
+* `learn_rate` controls how much each new tree contributes to the estimate of $f$ - the default is 0.3. This should be tuned every time you tune the value of `trees`.
+* `tree_depth` controls the interaction depth of the trees - the default is 6, which can support up to six-way interactions. If you tune this, make sure you include a value of 1 (purely additive model) in your grid.
+
+### Regression with `tidymodels` and `xgboost`
+
+`xgboost` cannot work with categorical variables, so we need to convert to indicator variables. However, we do not need to standardize the quantitative predictor variables: 
+
+```{r}
+#| label: xgboost regression model
+
+xgboostR_model <- boost_tree(
+  mode = "regression",
+  engine = "xgboost",
+  trees = tune(),     # numbers of trees to fit
+  tree_depth = tune(),     # interaction depth - how many variables can we split on before getting to a terminal node
+  learn_rate = tune()     # how fast our trees learn from the previous tree's mistales
+)
+
+```
+
+```{r}
+#| label: xgboostR recipe
+xgboostR_recipe <- recipe(
+  salary ~ G +  R + H + X2B + X3B + HR + RBI + 
+    SB + CS + BB + SO + IBB + HBP + SH + SF + 
+    GIDP + age + lgID, # response ~ predictors
+  data = batting_train
+) |>
+  step_dummy(all_nominal_predictors())
+
+xgboostR_wflow <- workflow() |>
+  add_model(xgboostR_model) |>
+  add_recipe(xgboostR_recipe)
+```
+
+Because we have a bunch of tuning parameters, it's recommended to set up your tuning grid manually. However, if you really have no idea what parts of the parameter space you should be searching in (which is not unusual), you can use an algorithm such as `grid_max_entropy` or `grid_space_filling` that will ensure that the optimal solution is "not too far" from a set of parameter values in the grid; you might then consider setting up a manual grid once you have an idea of where to "zoom in". Because those algorithms do some random sampling from the parameter space to determine the grid, it's best to set a seed before doing the tuning if you're using those functions. 
+
+The tuning does take a bit of time to run:
+
+```{r}
+#| label: tune xgboostR
+
+xgboostR_tune <- tune_grid(
+  xgboostR_wflow,
+  resamples = batting_kfold,
+  metrics = metric_set(rmse),
+  grid = grid_space_filling(
+    trees(),
+    tree_depth(),
+    learn_rate(),
+    size = 20     # search over 20 combinations of the 3 parameters
+  )
+)
+
+```
+
+Let's get the best model:
+
+```{r}
+#| label: investigate best xgboostR model
+
+xgboostR_final <- select_by_one_std_err(
+  xgboostR_tune,
+  metric = "rmse",
+  tree_depth,     # smallest depth first
+  trees,     # fewer trees next
+  desc(learn_rate)     # highest learning rate
+)
+
+xgboostR_final
+
+```
+
+When we have to choose between models of similar cross-validated RMSE:
+
+* Models with lower interaction depth are simpler
+* Models with fewer trees and a higher learning rate tend to fit faster
+
+I tend to prioritize low interaction depth over the other two parameters, but I'm not sure if that's "best practice."
+
+```{r}
+#| label: finalize best xgboostR model
+
+xgboostR_wflow_final <- xgboostR_wflow |>
+  finalize_workflow(parameters = xgboostR_final)
+
+```
+
+```{r}
+#| label: fit and predict final xgboostR model
+
+xgboostR_fit <- fit(xgboostR_wflow_final, data = batting_train)
+
+xgboostR_predict <- augment(xgboostR_fit, new_data = batting_test)
+
+```
+
+Because boosted trees are just another type of tree ensemble, we can still get variable importance out:
+
+```{r}
+#| label: vip plot for xgboostR
+
+vip(
+  extract_fit_engine(xgboostR_fit),
+  scale = TRUE
+)
+
+```
+
+1. Compare the variable importance plot for the boosted model to the variable importance plot for the bagging and random forest models. Why do you think some variables have quite different importance in the different models?
+
+### Classification with `tidymodels` and `xgboost`
+
+`xgboost` can take a long time to tune. Here we're going to get a smaller training set so that it doesn't take forever.
+
+```{r}
+#| label: mini training and test sets
+set.seed(1000)
+# slice_sample takes a random sample of the rows
+RMP_train_mini <- dplyr::slice_sample(RMP_train, n = 500)
+RMP_test_mini <- dplyr::slice_sample(RMP_test, n = 250)
+RMP_kfold_mini <- vfold_cv(
+  data = RMP_train_mini,
+  v = 5, repeats = 3
+)
+```
+
+```{r}
+#| label: xgboost classification model
+xgboostC_model <- boost_tree(
+  mode = "classification", 
+  engine = "xgboost",
+  trees = tune(), 
+  tree_depth = tune(),
+  learn_rate = tune()
+)
+```
+
+```{r}
+#| label: xgboost recipe with step_bin2factor
+# Categorical predictors here, must use step_dummy()
+xgboostC_recipe <- recipe(
+hotness ~ scientific_age + gender + interest + 
+  uni_control + mentions_accent + discipline + uni_type,  
+  data = RMP_train
+)  |>
+  step_bin2factor(all_logical_predictors()) |> # step_dummy will not work with logical variables, we must convert to factor before using step_dummy
+  step_dummy(all_nominal_predictors()) # non-numeric variables must be converted to numeric to use in xgboost
+
+xgboostC_wflow <- workflow() |>
+  add_model(xgboostC_model) |>
+  add_recipe(xgboostC_recipe)
+```
+
+```{r}
+#| label: tune parameters xgboostC
+set.seed(148)
+xgboostC_tune <- tune_grid(xgboostC_model, 
+                      xgboostC_recipe, 
+                      resamples = RMP_kfold_mini,
+                      metrics = metric_set(mn_log_loss, accuracy),
+                      grid = grid_space_filling(
+                        trees(), 
+                        tree_depth(c(1,3)), # must specify lower and upper bounds, here we don't go beyond 3-way interactions
+                        learn_rate(), 
+                        size = 18)) # search over 18 possible combinations of the three parameters
+
+```
+
+```{r}
+#| label: investigate tuning results xgboostC
+autoplot(xgboostC_tune)
+```
+
+Notice that we now have a grid showing each metric in its own row and each tuning parameter in its own column. So each model is technically represented 6 times (one per figure), which can make finding the "best" model a bit complicated.
+
+```{r}
+#| label: select best xgboostC model
+xgboostC_best <- select_by_one_std_err(
+  xgboostC_tune,
+  metric = "mn_log_loss",
+ tree_depth, trees, desc(learn_rate)
+)
+
+xgboostC_best
+
+```
+
+Now we finalize our workflow and fit the model on the training set:
+
+```{r}
+#| label: finalize and fit xgboostC
+xgboostC_wflow_final <- finalize_workflow(xgboostC_wflow, parameters = xgboostC_best) 
+
+xgboostC_fit <- fit(xgboostC_wflow_final, data = RMP_train)
+xgboostC_fit
+
+```
+
+2. What is this data frame showing?
+
+```{r}
+#| label: predict and vip with xgboostC
+xgboostC_predict <- augment(xgboostC_fit, new_data = RMP_test_mini)
+xgboostC_predict |>
+  dplyr::select(.pred_class, .pred_hot, .pred_cold, hotness, scientific_age, gender, everything())
+
+mn_log_loss(xgboostC_predict, truth = hotness, .pred_hot, event_level = "first")
+
+xgboostC_fit |> extract_fit_engine() |>
+      vip(scale = TRUE)
+```

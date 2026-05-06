@@ -58,7 +58,7 @@ So we have a fairly small training set (83 foods) and test set (21 foods). We pr
 ```{r}
 #| label: plot taste data
 
-X
+
 
 ```
 
@@ -78,7 +78,7 @@ First we create a list to store our predictions in. Setting this list up is a bi
 ```{r}
 #| label: set up loocv
 
-x
+
 
 ```
 
@@ -87,7 +87,7 @@ Now we create our for loops. Remember that the `glm` function predicts the proba
 ```{r}
 #| label: loocv with for loops
 
-x
+
 
 ```
 
@@ -98,7 +98,7 @@ We can get the LOOCV estimate of the test error rate using each value of `k`:
 ```{r}
 #| label: loocv test error rate
 
-x
+
 
 ```
 
@@ -110,7 +110,7 @@ Now that we know that the degree-3 polynomial produces the lowest LOOCV error ra
 ```{r}
 #| label: final logistic fit
 
-x
+
 
 ```
 
@@ -125,7 +125,7 @@ We can no longer easily store the individual predictions. So here each entry in 
 ```{r}
 #| label: set up the k folds
 
-x
+
 
 ```
 

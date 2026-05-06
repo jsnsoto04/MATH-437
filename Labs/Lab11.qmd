@@ -1,0 +1,604 @@
+---
+title: "Lab Assignment #11"
+author: "Math 437 - Modern Data Analysis"
+format: pdf
+---
+
+## Instructions
+
+In this lab we will look at decision trees and ensembles of decision trees for both classification and regression.
+
+```{r}
+#| label: do this at the beginning of every lab file
+#| message: false
+#| warning: false
+here::i_am("Labs/Lab11.qmd")
+
+# You may not need all of this, but you'll need most of it
+library(ISLR2)
+library(dplyr)
+library(rpart)
+library(randomForest)
+library(gbm)
+library(tidymodels)
+library(ranger)
+library(vip)
+library(xgboost)
+
+# load and split public_2020 dataset
+public <- readr::read_csv(here::here("Data/public_2020.csv"))
+public <- public |>
+  mutate(
+    MSI = if_else(HBCU | HSI, "Yes", "No") |> as.factor()
+  )
+
+set.seed(3745)
+public_split <- initial_split(
+  public,
+  prop = 0.75
+)
+public_train <- training(public_split)
+public_test <- testing(public_split)
+```
+
+This lab assignment is worth a total of **25 points** with up to 5 points of extra credit.
+
+## Problem 1: Decision Trees
+
+In past years, students have complained that the `tree` package wasn't running on their version of R. So instead of doing Labs 8.3.1 and 8.3.2 we will run similar code using the `rpart` package.
+
+I have written each of the code chunks below to match Labs 8.3.1 and 8.3.2 as closely as possible. For each part, run the corresponding code chunks and answer the question about the output. You may find reading the text in Labs 8.3.1 and 8.3.2 to be useful.
+
+### Part a (Explanation: 1 pt)
+
+```{r}
+#| label: create High variable
+
+Carseats2 <- Carseats |>
+  mutate(
+    High = if_else(Sales <= 8, "No", "Yes"))
+```
+
+```{r}
+#| label: classification tree for Carseats2
+
+tree.carseats <- rpart(High ~. - Sales, data = Carseats2)
+
+par(xpd = TRUE)
+plot(tree.carseats, uniform = TRUE)
+text(tree.carseats, pretty = 0)
+```
+
+Briefly explain how to interpret this tree: which stores would end up in the very left "no" group, and which stores would end up in the very right "yes" group?
+
+Stores that end up in the very left "no" group would be stores with bad shelf locations, prices that are less than 92.50 dollars, spend less than than 13,500 dollars on advertising,and their Competitor price is less than 124.50 dollars.
+Stores that end up in the very right "yes" group would be stores with good shelf locations and prices that are 142.50 dollar or more.
+
+#### Solution
+
+### Part b (Explanation: 1 pt)
+
+```{r}
+#| label: look at the tree
+
+tree.carseats
+
+```
+
+What do the numbers in the parentheses mean? What do the stars mean?
+
+#### Solution
+
+The numbers in the parenthesis is probability of being no and yes in that order.
+Stars refer to terminal nodes, the end points of the tree
+
+### Part c (Explanation: 0.5 pts)
+
+```{r}
+#| label: cross-validate tree model
+
+set.seed(2)
+train <- sample(1:nrow(Carseats2), 200)
+Carseats.test <- Carseats2[-train,]
+
+tree.carseats <- rpart(High ~ . - Sales, 
+                       data = Carseats2, 
+                       subset = train, 
+                       control = rpart.control(xval = 10))
+names(tree.carseats)
+```
+
+```{r}
+#| label: predict with best tree model
+
+tree.pred <- predict(tree.carseats, Carseats.test, type = "class")
+table(tree.pred, Carseats.test$High, dnn = c("Predicted", "Actual"))
+```
+
+What does the argument `xval = 10` mean?
+
+#### Solution
+
+10 fold cross validation.
+
+### Part d (Explanation: 1 pt)
+
+```{r}
+#| label: regression tree with Boston housing
+
+set.seed(1, kind = "Mersenne-Twister")
+n <- nrow(Boston)
+train <- sample(1:n, n/2)
+tree.boston <- rpart(medv~., Boston, subset = train, control = rpart.control(xval = 10))
+```
+
+```{r}
+#| label: visualize regression tree
+
+par(xpd = TRUE)
+plot(tree.boston, uniform = TRUE)
+text(tree.boston, pretty = 0)
+```
+
+Briefly explain how to interpret this tree: which neighborhoods would be predicted to have a `medv` of 10.32? Which neighborhoods would be predicted to have a `medv` of 27.73?
+
+#### Solution
+
+Neighborhoods with a medv of 10.32 have less than 6.96 average number of rooms, have 14.4% or greater lower status population, and have 11.49 or greater per capita crime in town.
+Neighborhoods with a medv of 27.73 have less than 6.96 average number of rooms, have less than 14.4% lower status population, and have 6.53 average number of rooms or more.
+
+### Part e (Explanation: 1 pt)
+
+```{r}
+#| label: predictions with Boston regression tree
+
+yhat <- predict(tree.boston, Boston[-train,])
+boston.test <- Boston$medv[-train]
+plot(yhat, boston.test)
+abline(0,1)
+mean((yhat - boston.test)^2)
+```
+
+Why do we get this pattern - a bunch of vertical lines - in the plot? (HINT: We saw plots like this in the example code from lecture, but they were horizontal lines because the predictions were on the verticalaxis instead.)
+
+#### Solution
+
+This is because regression trees aren't continuous, giving discrete type behavior due to piecewise constant predictions. With multiple observations sharing the same predicted values, vertical lines are created.
+
+### Part f (Code: 2.5 pts; Explanation: 1.5 pts)
+
+We are now going to predict which public institutions are minority-serving institutions (HBCU or HSI).
+
+Using tidymodels with the `rpart` package, fit a classification tree model on the training set. Tune the cost-complexity parameter using a grid of values between 0.01 and 1 with a reasonable enough number of levels so that you can actually see how your error metric of choice changes as a function of the cost-complexity parameter.
+
+Choose a cost-complexity parameter by either Brier score or mean log-loss and fit that "best" model on the training set. Plot the final classification tree and explain how to use the tree to predict whether a school is MSI vs. non-MSI.
+
+#### Solution
+
+```{r}
+#| label: Monster Chunk
+
+treeC_model <- decision_tree(
+  mode = "classification",     # classification or regression
+  engine = "rpart",     # use rpart package to fit the tree
+  cost_complexity = tune()     # tune this, but leave min_n and max_depth at default
+)
+
+treeC_recipe <- recipe(
+  MSI ~ .,  
+  data = public_train
+  ) |>
+  step_rm(HBCU, HSI, Name)
+
+treeC_wflow <- workflow() |>
+  add_model(treeC_model) |>
+  add_recipe(treeC_recipe)
+
+set.seed(67)
+
+public_kfold <- vfold_cv(public_train, v = 5, repeats = 3) 
+
+treeC_tune <- tune_grid(
+  treeC_wflow,
+  resamples = public_kfold,
+  metrics = metric_set(mn_log_loss),
+  grid = grid_regular(cost_complexity(range = c(-3, 1)), levels = 20))
+
+autoplot(treeC_tune)
+
+treeC_best <- select_by_one_std_err(
+  treeC_tune,
+  metric = "mn_log_loss",
+  desc(cost_complexity)
+)
+
+treeC_best
+
+treeC_wflow_final <- finalize_workflow(
+  treeC_wflow, 
+  parameters = treeC_best
+  ) 
+
+treeC_fit <- fit(treeC_wflow_final, data = public_train)
+
+treeC_fit
+
+par(xpd = TRUE) # otherwise things clip
+extract_fit_engine(treeC_fit) |>
+  plot(compress = TRUE, margin = 0, uniform = TRUE) 
+# uniform = TRUE makes the tree drawing more uniform
+# helps to space out the text issues
+
+extract_fit_engine(treeC_fit) |>
+  text(use.n = TRUE, minlength = 4, cex = 0.75)
+# cex = 0.75 puts text at 3/4 size for readability
+
+```
+
+If Pell Grant is less than 0.5665, then the school is classified as non-MSI, "No". If Pell Grant is at 0.5665 or higher, then the school is classified as MSI, "Yes". The numbers at each end point show the counts of observations in each class, the prediction is based on the majority class.
+
+### Part g (Code: 1 pt)
+
+Using your final model from Part f, make predictions on the test set. Obtain the confusion matrix and compute the estimated Brier score or mean log-loss.
+
+#### Solution
+
+```{r}
+#| label: Predict 1
+
+treeC_predictions <- treeC_fit |>
+  augment(new_data = public_test)
+
+treeC_predictions
+
+conf_mat(
+  treeC_predictions,
+  truth = MSI,
+  estimate = .pred_class
+)
+
+brier_class(treeC_predictions, truth = MSI, .pred_Yes)
+
+```
+
+
+## Problem 2: Random Forests and Boosted Trees
+
+### Part a (Code: 2 pts)
+
+Run the code in ISLR Labs 8.3.3 and 8.3.4. Put each chunk from the textbook in its own chunk.
+
+#### Solution
+
+```{r}
+#| label: 8.3.3 Chunk 1
+
+set.seed(1)
+
+bag.boston <- randomForest(medv ~ .,
+                           data = Boston,
+                           subset = train, mtry = 12, importance = TRUE)
+
+ bag.boston
+
+```
+
+```{r}
+#| label: 8.3.3 Chunk 2
+
+yhat.bag <- predict(bag.boston, newdata = Boston[-train, ])
+
+plot(yhat.bag, boston.test)
+abline(0, 1)
+
+mean((yhat.bag - boston.test)^2)
+
+```
+
+```{r}
+#| label: 8.3.3 Chunk 3
+
+bag.boston <- randomForest(medv ~ .,
+                           data = Boston,
+                           subset = train, mtry = 12, ntree = 25)
+
+yhat.bag <- predict(bag.boston, newdata = Boston[-train, ])
+
+mean((yhat.bag - boston.test)^2)
+
+```
+
+```{r}
+#| label: 8.3.3 Chunk 4
+
+set.seed(1)
+
+rf.boston <- randomForest(medv ~ .,
+                          data = Boston,
+                          subset = train, mtry = 6, importance = TRUE)
+yhat.rf <- predict(rf.boston, newdata = Boston[-train, ])
+mean((yhat.rf - boston.test)^2)
+
+```
+
+```{r}
+#| label: 8.3.3 Chunk 5
+
+randomForest::importance(rf.boston)
+varImpPlot(rf.boston)
+
+```
+
+```{r}
+#| label: 8.3.4 Chunk 1
+
+set.seed(1)
+
+boost.boston <- gbm(medv ~ .,
+                    data = Boston[train, ],
+                    distribution = "gaussian", n.trees = 5000,
+                    interaction.depth = 4)
+
+summary(boost.boston)
+
+```
+
+```{r}
+#| label: 8.3.4 Chunk 2
+
+plot(boost.boston, i = "rm")
+plot(boost.boston, i = "lstat")
+
+```
+
+```{r}
+#| label: 8.3.4 Chunk 3
+
+yhat.boost <- predict(boost.boston,
+                      newdata = Boston[-train, ],
+                      n.trees = 5000)
+
+mean((yhat.boost - boston.test)^2)
+
+```
+
+```{r}
+#| label: 8.3.4 Chunk x
+
+boost.boston <- gbm(medv ~ .,
+                    data = Boston[train, ],
+                    distribution = "gaussian",
+                    n.trees = 5000,
+                    interaction.depth = 4,
+                    shrinkage = 0.2,
+                    verbose = F)
+
+yhat.boost <- predict(boost.boston,
+                      newdata = Boston[-train, ],
+                      n.trees = 5000)
+
+mean((yhat.boost - boston.test)^2)
+
+```
+
+### Part b (Code: 2.5 pts)
+
+Using tidymodels, create a random forest model predicting whether an institution is a minority-serving institution (`MSI`) from the other variables in the dataset (except, obviously, `HBCU` and `HSI`, and `Name`). The `rand_forest` function will accept either `randomForest` or `ranger` as the `engine`.
+
+Make sure to use `set_args` to tell tidymodels you want to use permutation-based importance (you will need it for part d). Tune the value of `mtry` using cross-validation; use values of `mtry` from 1 to 14 (14 = bagging).
+
+Select your best model by cross-validated Brier score and justify your choice. Using your best model, obtain the out-of-bag prediction error (Brier score) on the training set.
+
+#### Solution
+
+```{r}
+#| label: Frankenstein Chunk
+
+rfC_model <- rand_forest(
+  mode = "classification",
+  engine = "ranger"
+) |>
+  set_args(
+    seed = 121,     # set INSIDE set_args
+    mtry = tune(),
+    importance = "permutation"
+  )
+
+rfC_recipe <- recipe(
+  MSI ~ .,
+  data = public_train
+) |>
+  step_rm(HBCU, HSI, Name)
+
+rfC_wflow <- workflow() |>
+  add_model(rfC_model) |>
+  add_recipe(rfC_recipe)
+
+rfC_grid <- expand.grid(mtry = seq(1, 14))
+
+rfC_tune <- tune_grid(rfC_wflow, 
+                      resamples = public_kfold, 
+                      metrics = metric_set(brier_class),
+                      grid = rfC_grid)
+
+rfC_best <- select_best(rfC_tune, metric = "brier_class")
+
+rfC_best
+
+rfC_final_wflow <- finalize_workflow(
+  rfC_wflow,
+  parameters = rfC_best
+)
+
+rfC_fit <- fit(rfC_final_wflow, data = public_train)
+
+rfC_fit
+
+rfC_engine <- rfC_fit |> extract_fit_engine()
+
+rfC_engine |> pluck("prediction.error")
+
+```
+
+
+### Part c (Code: 1 pt; Explanation: 0.5 pts)
+
+Using the model chosen in Part b, obtain predictions on the test set and compute the estimated test Brier score. Compare Brier score on the test set to the cross-validated mean Brier score and out-of-bag prediction error on the training set.
+
+#### Solution
+
+```{r}
+#| label: Predict 2
+
+rfC_predictions <- rfC_fit |>
+  augment(new_data = public_test)
+
+rfC_predictions
+
+conf_mat(
+  rfC_predictions,
+  truth = MSI,
+  estimate = .pred_class
+)
+
+show_best(rfC_tune, metric = "brier_class")             # CV Brier
+rfC_engine |> pluck("prediction.error")                 # OOB Brier
+brier_class(rfC_predictions, truth = MSI, .pred_No)     # Test Brier
+
+```
+To compare, Brier score just got better as we went. The cross-validated mean Brier score was .1161. The out-of-bag prediction error on the training set was .1131. Finally, the estimated test Brier score was .1099.
+
+### Part d (Code: 0.5 pts; Explanation: 1 pt)
+
+Obtain and plot estimates of variable importance (`%IncMSE` column if you are using `randomForest` or `variable.importance` if you are using `ranger`) for the model chosen in Part b. Which predictor variables have the largest importance and are thus the most useful for making the predictions?
+
+#### Solution
+
+```{r}
+#| label: Variable Importance
+
+rfC_fit |> extract_fit_engine() |>
+      vip(scale = TRUE)
+
+```
+The most important predictor to determine if some university is a Minority Serving Institution is the Pell Grant, so in the graph, all else is scaled to that predictor. Aside from the main one, the top 3 important predictors are SAT scores, Default Rate, and Federal Loan, with the SAT scores definitely overshadowing the latter 2.
+
+### Part e (Code: 2.5 pts)
+
+Using tidymodels with the `xgboost` package, fit a gradient-boosted tree model on the training set using the same predictors as the decision tree and random forest models. Tune only the 3 hyperparameters discussed in lecture: the number of trees to fit (`trees`), interaction depth (`tree_depth`), and learning rate (`learn_rate`). In order for this to not take forever, search over a small grid: 50, 100, 250, and 500 for `trees`, 1 and 2 for `tree_depth`, and 0.01 and 0.10 for `learn_rate`.
+
+Select your best model by either Brier score or mean log-loss and justify your choice.
+
+#### Solution
+
+```{r}
+#| label: Super Chunk
+
+xgboostC_model <- boost_tree(
+  mode = "classification", 
+  engine = "xgboost",
+  trees = tune(), 
+  tree_depth = tune(),
+  learn_rate = tune()
+)
+
+xgboostC_recipe <- recipe(
+  MSI ~ .,  
+  data = public_train
+) |>
+  step_rm(HSI, HBCU, Name) |>
+  step_dummy(all_nominal_predictors())
+
+xgboostC_wflow <- workflow() |>
+  add_model(xgboostC_model) |>
+  add_recipe(xgboostC_recipe)
+
+set.seed(67)
+
+xgboostC_tune <- tune_grid(xgboostC_wflow, 
+                      resamples = public_kfold,
+                      metrics = metric_set(brier_class, mn_log_loss),
+                      grid = expand.grid(
+                        trees = c(50, 100, 250, 500), 
+                        tree_depth = c(1,2), # must specify lower and upper bounds, here we don't go beyond 3-way interactions
+                        learn_rate = c(.01, .1))
+                      ) 
+
+xgboostC_best <- select_best(xgboostC_tune, metric = "brier_class")
+
+xgboostC_best
+
+xgboostC_wflow_final <- finalize_workflow(xgboostC_wflow, parameters = xgboostC_best) 
+
+xgboostC_fit <- fit(xgboostC_wflow_final, data = public_train)
+
+xgboostC_fit
+
+```
+
+
+### Part f (Code: 1 pt)
+
+Using your best model from Part e, make predictions on the test set. Obtain the confusion matrix and the estimated Brier score or mean log-loss on the test set.
+
+#### Solution
+
+```{r}
+#| label: Predictions and Brier
+
+xgboostC_predictions <- augment(xgboostC_fit, new_data = public_test)
+
+xgboostC_predictions
+
+conf_mat(
+  xgboostC_predictions,
+  truth = MSI,
+  estimate = .pred_class
+)
+
+brier_class(xgboostC_predictions, truth = MSI, .pred_No)
+
+```
+
+
+### Part g (Code: 0.5 pts; Explanation: 1 pt)
+
+Produce a variable importance plot for your xgboost model from Part e. Compare the (relative) variable importances between the random forest and xgboost models.
+
+#### Solution
+
+```{r}
+#| label: VIP
+
+xgboostC_fit |> extract_fit_engine() |>
+      vip(scale = TRUE)
+
+```
+
+In this VIP chart, Pell Grant remains the most important, following right below it at 25% is Federal Loan. SAT scores takes another jump to a value close to 13%, and then faculty and so on and so forth. So, I would say the main difference between the two is that SAT and Federal Loan swaps with each other on each graph for 2nd and 3rd in terms of importance, however, SAT carries much more relative importance in the Random Forest VIP graph than the Federal Loan does in the xgboost VIP graph. This information tells us this about the model itself and not just some graphs. After that a lot of variables switch places. Another main point is that variables carry more importance overall in general in the Random Forest model than they do in the xgboost model.
+
+### Part h (Explanation: 1 pt)
+
+Consider the following statement: the second decision tree that is fit does not depend on the first decision tree that is fit. Is that statement TRUE or FALSE for the random forest algorithm? What about for boosted trees? Explain your reasoning.
+
+#### Solution
+
+The statement is true for random forests, each tree is done separately with a bootstrap sample of the data and a random subset of predictors, so, the second tree has nothing to with the first tree in any way. but FALSE for boosted trees. 
+
+The statement is false for boosted trees. Boosting builds trees off its prior tree. Each new tree is fit to the residuals of the previous trees. Therefore, the second tree clearly depends on the first tree.
+
+## Problem 3: Neural Networks
+
+### Part a (Computation and Explanation: 2 pts)
+
+Consider two predictors, $x_1$ and $x_2$, feeding into a two-unit hidden layer. Suppose that the hidden layer uses ReLU activation functions with $w_{kj}$ given in Equation (10.6) of the book and the output layer uses a linear activation function with $\beta_j$ given in equation (10.6).
+
+Find the activation functions $A_1(x_1, x_2)$ and $A_2(x_1, x_2)$ and $f(x_1, x_2)$. Note: $f(x_1, x_2)$ should be a piecewise function.
+
+#### Solution
+
+
+
+### Part b (Compuation: 5 pts Extra Credit)
+
+No.

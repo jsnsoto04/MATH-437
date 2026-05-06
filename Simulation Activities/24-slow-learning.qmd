@@ -1,0 +1,413 @@
+---
+title: "Activity: Understanding Slow Learning"
+subtitle: "Math 437"
+format: html
+editor: source
+---
+
+## A Simple Example
+
+In this example, we're going to build a boosted tree algorithm. We're not going to do any tuning, so it's going to suck; we're using it as a didactic example.
+
+We'll use the `batting_2016` data because it's much easier to explain slow learning with regression problems than classification problems.
+
+```{r}
+#| label: create batting_2016 data
+#| warning: false
+#| message: false
+library(Lahman)
+library(tidyverse)
+library(tidymodels)
+library(rpart)
+
+salaries <- Salaries %>%
+  dplyr::select(playerID, yearID, teamID, salary)
+peopleInfo <- People %>%
+  dplyr::select(playerID, birthYear, birthMonth, nameLast,
+         nameFirst, bats)
+batting <- battingStats() %>% 
+  left_join(salaries, 
+            by =c("playerID", "yearID", "teamID")) %>%
+  left_join(peopleInfo, by = "playerID") %>%
+  mutate(age = yearID - birthYear - 
+           1L *(birthMonth >= 10)) %>%
+  arrange(playerID, yearID, stint)
+
+batting_2016 <- batting %>% filter(yearID == 2016,
+                                   !is.na(salary),
+                                   G >= 100, AB >= 200
+                                   ) %>%
+  mutate(salary = log10(salary), # there's a reason for this, I promise
+         lgID = factor(lgID, levels = c("AL", "NL"))) # fix the defunct league issue
+```
+
+In fast learning, we fit the model one time and whatever we get out - good or bad - is our final model.
+
+In contrast, in slow learning, we start out with terrible models, and on each iteration, we get slightly less terrible, until we (hopefully) have a model that doesn't suck.
+
+Let's arbitrarily fit the model for 50 iterations. In practice, we'd want to tune the number of iterations - large enough that we're making good predictions on the training set, not so large that we're overfitting.
+
+```{r}
+#| label: setup predictions
+niterations <- 50
+salary_predictions <- vector("list", length = niterations+1)
+names(salary_predictions) <- paste0("Step", seq(0, niterations))
+rmse_valid <- numeric(niterations + 1)
+fhat <- vector("list", length = niterations)
+```
+
+## Step 1: Initialize the Model
+
+```{r}
+#| label: training-validation-test split
+set.seed(115, kind = "Mersenne-Twister")
+batting_2016_split <- initial_validation_split(
+  batting_2016,
+  prop = c(.6,     # training
+           .2     # validation
+           )
+)
+
+# 60% of the data used to fit the model
+# 20% of the data used to validate the model on each step
+# 20% of the data used as a test set
+
+batting_train <- training(batting_2016_split)
+batting_test <- testing(batting_2016_split)
+batting_valid <- validation(batting_2016_split)
+
+```
+
+### Step 1a: Fit a Useless Model
+
+The book suggests to use $\hat{f}^0(x) = 0$. We can create a much better model while still maintaining the criterion that the model has to be completely useless for predictions: $\hat{f}^0(x) = \bar{y}$. This is the null model that predicts everyone to have the average salary in the training set. If we can't make better predictions than this null model, we are in serious trouble.
+
+```{r}
+#| label: Step 1a - useless model
+
+yhat0 <- mean(batting_train$salary)
+
+```
+
+### Step 1b: Compute the Residuals
+
+We now make predictions on the training set using our useless model and store the residuals.
+
+```{r}
+#| label: Step 1b - residuals
+
+resid0 <- batting_train$salary - yhat0
+
+batting_new <- batting_train |>
+  mutate(
+    current_pred = yhat0,
+    current_resid = salary - yhat0
+  )
+
+```
+
+
+```{r}
+#| label: Step 1 predictions
+
+batting_valid <- batting_valid |>
+  mutate(
+    current_pred = yhat0,
+    current_resid = salary - yhat0
+  )
+ggplot(batting_valid, aes(x = salary, y = current_pred)) +
+  geom_point() +
+  labs(x = "Actual Salary", y= "Predicted Salary (Step 0)") +
+  geom_abline(intercept = 0, slope = 1)
+
+salary_predictions[[1]] <- batting_new$current_pred
+rmse_valid[1] <- rmse(batting_valid, truth = salary, estimate = current_pred) |>
+  pull(.estimate)
+rmse_valid[1]
+```
+
+To absolutely no one's surprise, this is an absolutely terrible model.
+
+## Step 2: Fit the Best Model on the Residuals
+
+The first trick to slow learning is that we always want to fit the next model to predict the *prediction errors* from the previous model. You can think of this as trying to learn where and why the previous model screwed up.
+
+### Step 2a: Find the Best Model
+
+We're going to fit trees that can only split based on 1 variable, because this lesson isn't going to bother doing cross-validation to figure out the right interaction depth.
+
+```{r}
+#| label: step 2a setup
+predictor_possibilities <- c(
+  "G", "R", "H", "X2B", "X3B", "HR", "RBI",
+  "SB", "CS", "BB", "SO", "IBB", "HBP", "SH", 
+  "SF", "GIDP","age", "lgID"
+)
+```
+
+We search over all predictors to see which model produces the lowest validation set RSS.
+
+```{r}
+#| label: step 2a search over predictors
+
+p <- length(predictor_possibilities)
+
+RSS <- numeric(p)     # p 0's
+
+for (j in seq_along(predictor_possibilities)) {
+  candidate_formula <- paste("current_resid ~ ",
+                             predictor_possibilities[j])
+  candidate_model <- rpart(
+    formula = as.formula(candidate_formula),
+    data = batting_new,
+    maxdepth = 1     # not sure if this is right, but we only have one variable in our formula anyway
+  )
+  valid_predictions <- predict(candidate_model,
+                               newdata = batting_valid)
+  candidate_residuals <- batting_valid$current_resid - valid_predictions
+  # Observed resid - predicted resid from previous model
+  RSS[j] <- sum(candidate_residuals^2)
+}
+
+best_predictor <- predictor_possibilities[which.min(RSS)]
+# find the index corresponding to the minimum value in RSS
+
+best_predictor
+
+```
+
+It looks like a tree with a split based on IBB produces the minimum RSS.
+
+### Step 2b: Obtain the New Predicted Residuals
+
+Now we re-fit the model using our best predictor.
+
+```{r}
+#| label: Step 2b fit model
+
+final_formula <- paste("current_resid ~ ", best_predictor)
+
+fhat[[1]] <- rpart(
+  formula = as.formula(final_formula),
+  data = batting_new
+)
+
+```
+
+```{r}
+#| label: Step 2b make predictions
+
+yhat1 <- predict(fhat[[1]], batting_new)
+
+yhat_valid <- predict(fhat[[1]], newdata = batting_valid)
+
+```
+
+## Step 3: Update the Model
+
+We only add in a *fraction* of the predictions, thus updating only a *fraction* of the residuals. This fraction is controlled by the learning rate $\lambda$.
+
+The larger $\lambda$ is, the more aggressively the model adjusts its predictions. This generally achieves convergence in fewer iterations, but can overcorrect. A small value of $\lambda$ adjusts the predictions much more conservatively, but it may take longer to fit. In a real model, we would want to tune the learning rate, but again, this is a didactic exercise; let's just hard-code $\lambda = 0.1$, that is, add in only 10% of the prediction on every iteration.
+
+```{r}
+#| label: step 3 update model
+
+lambda <- .1
+
+batting_new <- batting_new |>
+  mutate( # overwrite the training set
+    current_pred = current_pred + lambda * yhat1,
+    current_resid = current_resid - lambda * yhat1
+  )
+
+batting_valid <- batting_valid |>
+  mutate( # overwrite the training set
+    current_pred = current_pred + lambda * yhat_valid,
+    current_resid = current_resid - lambda * yhat_valid
+  )
+
+salary_predictions[[2]] <- batting_new$current_pred
+ggplot(data = batting_valid,
+       mapping = aes(x = salary, y = current_pred)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1) +
+  labs(x = "Actual Salary", y = "Predicted Salary (Step 1)")
+
+rmse_valid[2] <- rmse(batting_valid, truth = salary, estimate = current_pred) |>
+  pull(.estimate)
+
+rmse_valid[2]
+
+```
+
+Notice that our validation set RMSE has decreased by only about 0.02. That's by design - this is only the first iteration. On each iteration, we intend to decrease the validation set RMSE.
+
+## Step 4: Repeat
+
+Each time through the loop, we have to do Steps 2 and 3:
+
+```{r}
+#| label: step 4 repeat
+# outer for loop - each iteration
+for (stepno in 2:niterations) {
+  RSS <- numeric(p)     # reset the RSS vector
+
+# inner for loop - searching over each candidate model
+  
+  for (j in seq_along(predictor_possibilities)) {
+  candidate_formula <- paste("current_resid ~ ",
+                             predictor_possibilities[j])
+  candidate_model <- rpart(
+    formula = as.formula(candidate_formula),
+    data = batting_new,
+    maxdepth = 1     # not sure if this is right, but we only have one variable in our formula anyway
+  )
+  valid_predictions <- predict(candidate_model,
+                               newdata = batting_valid)
+  candidate_residuals <- batting_valid$current_resid - valid_predictions
+  # Observed resid - predicted resid from previous model
+  RSS[j] <- sum(candidate_residuals^2)
+  }
+  
+  best_predictor <- predictor_possibilities[which.min(RSS)]
+  
+  final_formula <- paste("current_resid ~ ", best_predictor)
+  
+  fhat[[stepno]] <- rpart(
+  formula = as.formula(final_formula),
+  data = batting_new)
+  
+  yhat1 <- predict(fhat[[stepno]], batting_new)
+  
+  yhat_valid <- predict(fhat[[stepno]], newdata = batting_valid)
+  
+  batting_new <- batting_new |>
+  mutate( # overwrite the training set
+    current_pred = current_pred + lambda * yhat1,
+    current_resid = current_resid - lambda * yhat1
+  )
+
+batting_valid <- batting_valid |>
+  mutate( # overwrite the training set
+    current_pred = current_pred + lambda * yhat_valid,
+    current_resid = current_resid - lambda * yhat_valid
+  )
+
+  current_rmse <- rmse(batting_valid,
+                       truth = salary,
+                       estimate = current_pred) |>
+    pull(.estimate)
+  
+  cat(
+    paste0(
+      "Step No. ", stepno,
+      ": Best Predictor = ", best_predictor,
+      ", RMSE = ", round(current_rmse, 3), "\n"
+    )
+  )
+  
+  salary_predictions[[(stepno + 1)]] <- batting_new$current_pred
+  
+  rmse_valid[(stepno+1)] <- current_rmse
+
+}
+```
+
+```{r}
+#| label: plot RMSE
+
+data.frame(
+  iter = 0:50,
+  rmse = rmse_valid
+) |>
+  ggplot(
+    aes(x = iter, y = rmse)
+  ) +
+  geom_point() +
+  geom_line() +
+  labs(x = "Iteration Number", y = "Validation RMSE")
+
+```
+
+
+As you can see, the RMSE drops quickly and then starts leveling off, but it hasn't yet hit a minimum. Realistically, we don't want to train all the way down to the minimum RMSE, because that will almost certainly overfit. (Deep neural networks are a different story; a major assumption of deep learning is that there is so little noise in the data compared to the true complicated $f(x)$ that training down to 0 RMSE is actually desired.)
+
+Let's see how a few of our predictions panned out:
+
+```{r}
+#| label: Albert Pujols
+iter_pred <- as.data.frame(salary_predictions)
+iter_pred <- iter_pred |>
+  mutate(salary = batting_new$salary,
+         name = paste(batting_new$nameFirst, batting_new$nameLast))
+
+
+# Albert Pujols
+plot(0:niterations, (iter_pred |> filter(name == "Albert Pujols"))[,1:(niterations+1)],
+     xlab = "Iteration Number", ylab = "Predicted Salary",
+     ylim = c(6.4, 7.5),
+     main = "Albert Pujols")
+abline(h = (iter_pred |> filter(name == "Albert Pujols"))$salary)
+```
+
+Albert Pujols exemplifies what we *want* the model to be doing. We start out at a very bad prediction and slowly get better on most iterations, even though we don't ever quite get to the true salary.
+
+```{r}
+#| label: Mike Trout
+# Mike Trout
+plot(0:niterations, (iter_pred |> filter(name == "Mike Trout"))[,1:(niterations+1)],
+     xlab = "Iteration Number", ylab = "Predicted Value", ylim = c(6.1, 7.3),
+     main = "Mike Trout")
+abline(h = (iter_pred |> filter(name == "Mike Trout"))$salary)
+```
+
+This is what we *don't* expect to see. The model starts moving in the wrong direction and never really recovers. However, remember that we are minimizing the validation RSS, so making worse predictions for Trout may be seriously offset by improvements in predictions for players in the validation set.
+
+```{r}
+#| label: Jose Altuve
+# Jose Altuve
+plot(0:niterations, (iter_pred |> filter(name == "Jose Altuve"))[,1:(niterations+1)],
+     xlab = "Iteration Number", ylab = "Predicted Salary", ylim = c(6.2, 6.6),
+     main = "Jose Altuve")
+abline(h = (iter_pred |> filter(name == "Jose Altuve"))$salary)
+```
+
+Sometimes you get patterns like this - we start off going in the wrong direction, but then eventually start figuring it out and going back toward the actual response value.
+
+## Step 5: Make Predictions
+
+Since we overwrote `fhat` on every iteration, we don't know at what values any of the splits occurred, so we can't actually make predictions on the test set with this boosted tree. 
+
+```{r}
+#| label: make predictions
+
+batting_test <- batting_test |>
+  mutate(
+    .pred_salary = mean(batting_train$salary)
+  )
+
+for (stepno in 1:niterations) {
+  .pred_step <- predict(fhat[[stepno]], newdata = batting_test)
+  
+  batting_test <- batting_test |>
+    mutate(
+      .pred_salary = .pred_salary + lambda *.pred_step
+    )
+}
+
+ggplot(
+  data = batting_test,
+  mapping = aes(x = salary, y = .pred_salary)
+) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0) +     # line of perfect calibration
+  labs(
+    x = "Actual Salary",
+    y = "Predicted Salary (Test Set)"
+  )
+
+rmse(batting_test, truth = salary, estimate = .pred_salary)
+
+```
+
+It perhaps shouldn't surprise us that without doing literally any cross-validation, this RMSE isn't great. But this was just to illustrate the concept and basic algorithmic approach of slow learning.
