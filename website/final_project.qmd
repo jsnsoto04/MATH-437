@@ -20,7 +20,7 @@ This section should include:
 #| message: false
 
 # change this to the location of your Quarto file containing your project; then delete this comment
-here::i_am("math-437-project-template.qmd")
+here::i_am("final_project.qmd")
 ```
 
 This section describes what you are investigating in your project and why you are investigating it. You should provide enough contextual background and information that someone with a limited background can understand the broad outlines of the topic being investigated.
