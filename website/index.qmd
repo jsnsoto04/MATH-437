@@ -15,9 +15,9 @@ about: # https://quarto.org/docs/websites/website-about.html
 
 Just a simple site for my Modern Approaches to Data Analysis course.
 
-“It's your life. Do what you want with it.”
+"I see now that the circumstances of one's birth are irrelevant; it is what you do with the gift of life that determines who you are."
 
-― Kentaro Miura
+― Mewtwo
 
 ## Education
 
