@@ -1,0 +1,319 @@
+---
+title: "Activity: Neural Networks with tidymodels"
+subtitle: "Math 437"
+format: html
+editor: source
+---
+
+## Intro to Single Hidden Layer Neural Networks
+
+```{r}
+#| label: load packages
+library(tidyverse)
+library(tidymodels)
+library(torch)
+library(brulee) # tidymodels interface to torch package
+
+# run this code if you get an error that additional software needs to be installed
+#torch::install_torch()
+```
+
+
+1. Define the following terms: unit, layer, hidden layer, weight, bias, activation (activation function).
+
+Our conservative "simpler models are better" viewpoint suggests that if you can solve a problem with only one hidden layer, you should use only one hidden layer. 
+
+The `nnet` package in R provides a fairly simple single-hidden-layer network; we'll tune this in our regression example.
+
+The Chapter 10 lab in the textbook uses the `keras` package. Getting `keras` to work on your computer requires having the requisite Python libraries installed and getting R to understand where those libraries are. This can be a chore to setup. The tidymodels neural network options that use the `keras` engine only allow one hidden layer. For more complicated problems that require complicated architecture, using `keras` and `TensorFlow` directly (either the Python libraries or the R package that calls the Python code) is the vastly preferred option. Note that you can absolutely switch back and forth between R and Python in a Quarto document; however, you will need the `reticulate` package to pass to R objects you've created in Python and vice versa.
+
+The Python version of the Chapter 10 lab uses the [PyTorch](https://pytorch.org/) library and extensions. The [torch](https://torch.mlverse.org/) package is based on PyTorch and the `brulee` package provides a tidymodels interface to `torch`. The documentation says that you need to install the `torch` package and then some additional software will be installed when you load the library for the first time. However, you don't actually need to install Python on your computer or have RStudio figure out where it is. We'll tune this in our classification example.
+
+### Parameters To Tune
+
+There are five parameters that we can tune. Three of these parameters specifically set up the model:
+
+* `hidden_units` indicates the number of units in the hidden layer
+* `epochs` indicates the number of training iterations (this is essentially equivalent to `trees` in the boosted tree model)
+* `activation` indicates the type of activation function for the units in the hidden layer. The default is "softmax" (if you have an updated package it may be a bit smarter and use "linear" for regression problems), but the "relu" option is a popular alternative.
+
+1. Briefly explain the softmax, linear, and relu activation functions.
+
+The other two parameters define the type of regularization used. It is typically recommended to use/tune only one of `penalty` or `dropout`.
+
+2. Briefly describe the difference between these two types of regularization.
+
+Depending on the engine used to fit the neural network, some or all of these parameters may be set by default and not changeable. For example, I don't think it's possible to use dropout regularization with the `nnet` package, so tidymodels won't let you tune it.
+
+## Preprocessing the Data
+
+Neural networks work best when all predictors have distributions as close to $N(0, 1)$ as possible. This means that:
+
+* All nominal predictors should be replaced with indicator variables
+* All quantitative predictors should be transformed to something closer to a normal distribution
+* All quantitative predictors should be centered and scaled (i.e., converted to z-scores)
+
+We've talked about all three of these steps before: the first and third of these steps with `step_dummy` and `step_normalize`, respectively, and we've talked briefly about the Box-Cox transformation. Let's go slightly more in-depth on that transformation.
+
+### Box-Cox Transformation
+
+The Box-Cox transformation is a single transformation that searches over square root, log, reciprocal, and other transformations to find the one that gets closest to a normal distribution.
+
+$$
+T(x) = 
+\begin{cases}
+\frac{x^\lambda - 1}{\lambda}, \lambda \neq 0 \\
+log(x), \lambda = 0 \\
+\end{cases}
+$$
+
+where $\lambda$ is typically chosen such that correlation on the normal q-q plot of $T(x)$ is maximized.
+
+Notice that the Box-Cox transformation includes the following special cases:
+
+$$
+T(x) =
+\begin{cases}
+log(x), \lambda = 0 \\
+x - 1, \lambda = 1 \\
+2 \sqrt{x} - 2, \lambda = \frac{1}{2}\\
+1 - \frac{1}{x}, \lambda = -1
+\end{cases}
+$$
+
+i.e., to within a shift/scale the Box-Cox transformation can do log-transformation, square root-transformation, inverse (reciprocal) transformation, or no transformation at all!
+
+### Yeo-Johnson Transformation
+
+The Box-Cox transformation is only useful for strictly positive variables. When $x$ can contain non-positive values, you can get weird behavior and/or NaNs (e.g., we can't take square roots of negative numbers).
+
+Yeo and Johnson (2000) proposed a different power transform that works similarly to Box-Cox but doesn't do weird things with negative numbers:
+
+$$
+T(x) = 
+\begin{cases}
+\frac{(x+1)^\lambda - 1}{\lambda}, \lambda \neq 0, x \geq 0 \\
+log(x + 1), \lambda = 0, x \geq 0 \\
+-\frac{\left((-(x+1)^{2 - \lambda}) - 1\right)}{2 - \lambda}, \lambda \neq 2, x < 0\\
+-log(-x + 1), \lambda = 2, x < 0
+\end{cases}
+$$
+
+where again $\lambda$ is typically chosen such that the correlation on the normal q-q plot of $T(x)$ is maximized.
+
+The `step_BoxCox` and `step_YeoJohnson` functions in the `recipes` package will take care of the appropriate transformations.
+
+## Data
+
+For regression, we'll continue to use our Lahman baseball salary data. For classification, we'll predict whether a professor is `hot` or not.
+
+```{r}
+#| label: batting data
+#| warning: false
+#| message: false
+library(Lahman)
+
+salaries <- Salaries %>%
+  dplyr::select(playerID, yearID, teamID, salary)
+peopleInfo <- People %>%
+  dplyr::select(playerID, birthYear, birthMonth, nameLast,
+         nameFirst, bats)
+batting <- battingStats() %>% 
+  left_join(salaries, 
+            by =c("playerID", "yearID", "teamID")) %>%
+  left_join(peopleInfo, by = "playerID") %>%
+  mutate(age = yearID - birthYear - 
+           1L *(birthMonth >= 10)) %>%
+  arrange(playerID, yearID, stint)
+
+batting_2016 <- batting %>% filter(yearID == 2016,
+                                   !is.na(salary),
+                                   G >= 100, AB >= 200
+                                   ) %>%
+  mutate(salary = log10(salary), # there's a reason for this, I promise
+         lgID = factor(lgID, levels = c("AL", "NL"))) # fix the defunct league issue
+
+set.seed(11249, kind = "Mersenne-Twister")
+batting_2016_split <- initial_split(batting_2016, prop = 0.75)
+batting_train <- training(batting_2016_split)
+batting_test <- testing(batting_2016_split)
+batting_kfold <- vfold_cv(batting_train, v = 5, repeats = 1) 
+```
+
+```{r}
+#| label: RMP data
+RMP <- readr::read_csv(here::here("Data/RateMyProfessor.csv"))
+RMP$hotness <- factor(RMP$hotness, levels = c("hot", "cold"))
+RMP$rank <- factor(RMP$rank, 
+                   levels = c("Assistant Professor", "Associate Professor", "Professor"),
+                   labels = c("Asst", "Assoc", "Full"))
+set.seed(1880)
+RMP_split <- initial_split(RMP, prop = 0.80) 
+
+RMP_train <- training(RMP_split)
+RMP_test <- testing(RMP_split)
+```
+
+## Neural Network for Regression
+
+The function to fit a neural network within tidymodels is `mlp`, which stands for multi-layer perceptron. This function allows for only a single hidden layer; if you want more, you'll have to work directly with `torch`.
+
+```{r}
+#| label: regression model one hidden layer
+
+neuralnetR_model <- mlp(
+  # mlp stands for "multi-layer perception"
+  mode = "regression",
+  engine = "nnet",
+  hidden_units = tune(),
+  penalty = tune(),
+  epochs = 100
+) |>
+  set_args(seeds = c(1, 2, 3))
+
+# Note: the default with the nnet engine is an L2 penalty like ridge regression; in other models this may be an L1 penalty like LASSO
+# Note 2: in models with more "advanced" packages we also have the option to specify an activation function
+# Note 3: nnet fits fairly fast on this small data; more "advanced" packages take longer
+
+## complete the recipe
+neuralnetR_recipe <- recipe(
+  salary ~ G +  R + H + X2B + X3B + HR + RBI + 
+    SB + CS + BB + SO + IBB + HBP + SH + SF + GIDP + 
+    age + lgID, # response ~ predictors
+  data = batting_train
+) |>
+  step_YeoJohnson(all_numeric_predictors()) |>     # transforms each predictor to be "as normally distributed as possible"
+  step_normalize(all_numeric_predictors()) |>     # neural networks work best when the distribution of each x_j is close to N(0,1)
+  step_dummy(all_nominal_predictors())     # because this is linear regression, just with fancy nonlinear stuff
+
+neuralnetR_wflow <- workflow() |>
+  add_model(neuralnetR_model) |>
+  add_recipe(neuralnetR_recipe)
+  
+```
+
+If we don't know what grid we should be searching over, there's a nice way for us to see the defaults:
+
+```{r}
+#| label: investigate defaults
+
+neuralnetR_model |>
+  extract_parameter_set_dials() |>
+  pull("object")
+
+```
+
+1. We can use `grid_regular` without a `range` argument for each parameter. If we don't specify a `range` argument for `hidden_units`, what range will it search over? What about for `penalty`?
+
+```{r}
+#| label: tune regression model quickly
+
+neuralnetR_tune <- tune_grid(
+  neuralnetR_wflow,
+  resamples = batting_kfold,
+  metrics = metric_set(rmse),
+  grid = grid_regular(
+    hidden_units(range = 2^c(0, 5)),     # search from 1 to 32
+    penalty(),     # search over the defaults
+    levels = 6
+  )
+)
+
+autoplot(neuralnetR_tune)
+
+```
+
+```{r}
+#| label: select best regression model
+collect_metrics(neuralnetR_tune) |>
+  arrange(mean)
+
+neuralnetR_best <- select_by_one_std_err(
+  neuralnetR_tune,
+  metric = "rmse",
+  hidden_units, desc(penalty)
+)
+
+neuralnetR_wflow_final <- neuralnetR_wflow |>
+  finalize_workflow(parameters = neuralnetR_best) 
+
+```
+
+```{r}
+#| label: fit final regression model
+neuralnetR_fit <- fit(neuralnetR_wflow_final, data = batting_train)
+neuralnetR_fit
+```
+
+2. Somewhere other than in this file, sketch a diagram of the model that we are fitting.
+
+```{r}
+#| label: predict final regression model
+predictions_neuralnetR <- broom::augment(neuralnetR_fit, new_data = batting_test)
+predictions_neuralnetR |> dplyr::select(
+  nameFirst, nameLast, salary, .pred
+)
+rmse(predictions_neuralnetR, truth = salary, estimate = .pred)
+```
+
+Neural networks can be extremely fiddly to tune, and you often have to worry about overfitting as you mess with the tuning parameters. This one doesn't seem too awful compared to what we've seen with other regression models (we've been consistently between 0.4 and 0.5 with almost every model we've explored), but some of the "fancier" packages gave me absolutely *terrible* test RMSE.
+
+Generally, if you don't have a lot of data, or you have a lot of noise in your data, you **should not** be even thinking about fitting a neural network.
+
+## Neural Network for Classification
+
+I am not going to bother to tune this model; I'll just put in some reasonable guesses. If you were to tune the model, you would almost certainly use mean log-loss (`mn_log_loss`) because everyone uses mean log-loss to evaluate classification neural networks (even when it's not the most useful or important accuracy measure).
+
+```{r}
+#| label: classification neural network
+
+# Needs torch
+neuralnetC_model <- mlp(
+  mode = "classification",
+  engine = "brulee",     # tidymodels interface to torch
+  hidden_units = 32,
+  dropout = .1,
+  epochs = 100,
+  activation = "relu",     # use ReLU activation function
+  learn_rate = .05
+)
+
+# here we can specify an activation function and tune the dropout proportion
+# you should only ever specify 1 of dropout or penalty; otherwise things don't work well
+
+# complete the recipe
+neuralnetC_recipe <- recipe(
+hotness ~ scientific_age + gender + interest + uni_control + mentions_accent + discipline + uni_type,  
+  data = RMP_train
+)  |>
+  step_YeoJohnson(all_numeric_predictors()) |>
+  step_normalize(all_numeric_predictors()) |>
+  step_bin2factor(mentions_accent) |>     # because it's logical T/F
+  step_dummy(all_nominal_predictors())
+
+neuralnetC_wflow <- workflow() |>
+  add_model(neuralnetC_model) |>
+  add_recipe(neuralnetC_recipe)
+
+```
+
+```{r}
+#| label: fit classification model
+neuralnetC_fit <- fit(neuralnetC_wflow, data = RMP_train)
+neuralnetC_fit
+```
+
+Notice that we stopped after 9 epochs. Basically R has decided that further training will overfit.
+
+Sometimes you will get an error that says "Loss is NaN at epoch X. Training is stopped." This usually means that something has gone wrong with your data; for example, the gradient is flying off to infinity, or there are missing values you haven't imputed that the neural network doesn't know how to deal with. Generally the rule here is: if you see errors like this, you either don't have enough data to fit a neural network, or you don't understand your data well enough to know whether you should.
+
+```{r}
+#| label: predict classification model
+predictions_neuralnetC <- broom::augment(neuralnetC_fit, new_data = RMP_test)
+conf_mat(predictions_neuralnetC,
+         truth = hotness,
+         estimate = .pred_class)
+mn_log_loss(predictions_neuralnetC, truth = hotness, .pred_hot, 
+            event_level = "second")
+
+```

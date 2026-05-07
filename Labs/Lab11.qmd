@@ -597,6 +597,14 @@ Find the activation functions $A_1(x_1, x_2)$ and $A_2(x_1, x_2)$ and $f(x_1, x_
 
 #### Solution
 
+```{r}
+#| label: Insane Coding
+
+x <- "hello world"
+
+print(x)
+
+```
 
 
 ### Part b (Compuation: 5 pts Extra Credit)
