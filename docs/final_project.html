@@ -178,15 +178,17 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h2 class="anchored" data-anchor-id="summary">Summary</h2>
 <p>This section should include:</p>
 <ul>
-<li>Your main question or objective My main objective is to see if it is possible to somewhat be able to predict a Pokemon’s type based off of their base stats.</li>
-<li>The main insight(s) from your project</li>
-<li>A figure that supplements that insight, along with accompanying text describing the figure. This figure can be a cleaned-up version of a visualization you produced in EDA or a visualization using your final model.</li>
+<li><p>Your main question or objective My main objective is to see if it is possible to somewhat be able to predict a Pokemon’s type based off of their base stats.</p></li>
+<li><p>The main insight(s) from your project x</p></li>
+<li><p>A figure that supplements that insight, along with accompanying text describing the figure. This figure can be a cleaned-up version of a visualization you produced in EDA or a visualization using your final model. x</p></li>
 </ul>
 </section>
 <section id="motivation-and-context" class="level2">
 <h2 class="anchored" data-anchor-id="motivation-and-context">Motivation and Context</h2>
-<p>This section describes what you are investigating in your project and why you are investigating it. You should provide enough contextual background and information that someone with a limited background can understand the broad outlines of the topic being investigated.</p>
-<p>I am investigating if certain patterns exist between primary typing and base stats. This pattern will be found by and used in Multinomial Logistic Regression. I plan to use this to predict a Pokemon’s primary type based off their base stats. I am investigating out of pure curiousity and passion for Pokemon and to find out if I can truly apply what i have learned in class towards independent “research” and datasets.</p>
+<p>My investigation revolves around the Pokemon franchise, more specifically the statistical data of certain Pokemon in their games. This statistical data consists of their health, attack, defense, special attack, special defense, and speed. This info determines the raw strength of a Pokemon along with their level they may be. Each Pokemon has a type, like fire and water and such. With a total of 18 types, there are many differences between each Pokemon. The purpose of types is that it creates strategic advantages as some are stronger than others, some may be immune to others, and so on and so forth. Some Pokemon may even have two types, but I am focusing mostly on their primary type.</p>
+<p>My initial thoughts were to determine if certain types tend to have a superior average total of stats. That was kind of simple so I delved into the idea that it may be possible that types might have patterns in their base stats, like rock types might have better defense. This eventually grew to our final idea, can we predict a Pokemon’s type based off stats?</p>
+<p>So, I am investigating if we can predict a Pokemon’s primary type based off their base stats. This will be done by Multinomial Logistic Regression. Accurate predictions may very well imply that certain patterns exist between primary typing and base stats.</p>
+<p>I am investigating out of pure curiosity and passion for Pokemon and to find out if I can truly apply what i have learned in class towards independent “research” and datasets. I do also find it interesting if we can get a somewhat accurate type predictor based of off base stats.</p>
 </section>
 <section id="packages-used-in-this-analysis" class="level2">
 <h2 class="anchored" data-anchor-id="packages-used-in-this-analysis">Packages Used In This Analysis</h2>
@@ -291,9 +293,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <p>This CRAN dataset was collected by William Amorim and published in 2023. Based on linked sources, I would assume stats data was collected from Bulbapedia, a reliable and community-driven online encyclopedia dedicated to the Pokemon franchise, and from a GitHub that hosts data for Pokemon as well. A separate GitHub was used to link to Pokemon images.</p>
 <p>Indexing issues are caused by Mega Pokemon and by alternate versions of Pokemon, so I subsetted the dataset. Another reason for this was due to my lack of interest in the Pokemon past the 5th generation. So, Pokemon removed were any beyond the 5th generation. A few variables were removed too, such as 2 columns with urls that link to images, 3 columns that contained hex codes to their main colors, species id variable, and the 2 egg group variables. This is due to the fact that they will be useless here. The species id variable was removed since it was the same has the id variable, and egg groups are just irrelevant to my narrative. I also added a total stats variable that sums up all 6 of their base stats for a singular variable.</p>
 </section>
-<section id="data-wrangling-optional-section" class="level2">
-<h2 class="anchored" data-anchor-id="data-wrangling-optional-section">Data Wrangling (Optional Section)</h2>
-<p>If you did any data wrangling on Project 2, include it here. If you are creating training and test sets for predictive modeling, you should also include that code in an appropriate place in this section.</p>
+<section id="data-wrangling" class="level2">
+<h2 class="anchored" data-anchor-id="data-wrangling">Data Wrangling</h2>
 <div class="cell">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>pokemon <span class="ot">&lt;-</span> pokemon <span class="sc">|&gt;</span></span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(</span>
@@ -412,9 +413,14 @@ AIC: 2526.182 </code></pre>
 <li>Are the assumptions behind your analytical methods justified?</li>
 <li>Are there ethical concerns about how the data was collected or how the results of the analysis could be used in the real world?</li>
 </ul>
-
-
 </section>
+</section>
+<section id="extra-credit" class="level2">
+<h2 class="anchored" data-anchor-id="extra-credit">Extra Credit</h2>
+<p>If you went to any off-campus events this semester that involved statistics or math in some way (e.g., DataFest, GSB off-campus events, etc.) or attended on-campus events that brought in potential future colleagues/mentors from off-campus (e.g., grad school/career fairs, TSC events, etc.), you can write a paragraph at the end of the reflection telling me what you went to and what you got out of it (if it was a waste of time, tell me why).</p>
+<p>For each paragraph, you get an extra 5 points on this assignment, up to 20 points.</p>
+
+
 </section>
 
 </main> <!-- /main -->

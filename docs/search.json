@@ -11,14 +11,14 @@
     "href": "final_project.html#summary",
     "title": "Final Project",
     "section": "Summary",
-    "text": "Summary\nThis section should include:\n\nYour main question or objective My main objective is to see if it is possible to somewhat be able to predict a Pokemon’s type based off of their base stats.\nThe main insight(s) from your project\nA figure that supplements that insight, along with accompanying text describing the figure. This figure can be a cleaned-up version of a visualization you produced in EDA or a visualization using your final model."
+    "text": "Summary\nThis section should include:\n\nYour main question or objective My main objective is to see if it is possible to somewhat be able to predict a Pokemon’s type based off of their base stats.\nThe main insight(s) from your project x\nA figure that supplements that insight, along with accompanying text describing the figure. This figure can be a cleaned-up version of a visualization you produced in EDA or a visualization using your final model. x"
   },
   {
     "objectID": "final_project.html#motivation-and-context",
     "href": "final_project.html#motivation-and-context",
     "title": "Final Project",
     "section": "Motivation and Context",
-    "text": "Motivation and Context\nThis section describes what you are investigating in your project and why you are investigating it. You should provide enough contextual background and information that someone with a limited background can understand the broad outlines of the topic being investigated.\nI am investigating if certain patterns exist between primary typing and base stats. This pattern will be found by and used in Multinomial Logistic Regression. I plan to use this to predict a Pokemon’s primary type based off their base stats. I am investigating out of pure curiousity and passion for Pokemon and to find out if I can truly apply what i have learned in class towards independent “research” and datasets."
+    "text": "Motivation and Context\nMy investigation revolves around the Pokemon franchise, more specifically the statistical data of certain Pokemon in their games. This statistical data consists of their health, attack, defense, special attack, special defense, and speed. This info determines the raw strength of a Pokemon along with their level they may be. Each Pokemon has a type, like fire and water and such. With a total of 18 types, there are many differences between each Pokemon. The purpose of types is that it creates strategic advantages as some are stronger than others, some may be immune to others, and so on and so forth. Some Pokemon may even have two types, but I am focusing mostly on their primary type.\nMy initial thoughts were to determine if certain types tend to have a superior average total of stats. That was kind of simple so I delved into the idea that it may be possible that types might have patterns in their base stats, like rock types might have better defense. This eventually grew to our final idea, can we predict a Pokemon’s type based off stats?\nSo, I am investigating if we can predict a Pokemon’s primary type based off their base stats. This will be done by Multinomial Logistic Regression. Accurate predictions may very well imply that certain patterns exist between primary typing and base stats.\nI am investigating out of pure curiosity and passion for Pokemon and to find out if I can truly apply what i have learned in class towards independent “research” and datasets. I do also find it interesting if we can get a somewhat accurate type predictor based of off base stats."
   },
   {
     "objectID": "final_project.html#packages-used-in-this-analysis",
@@ -63,13 +63,6 @@
     "text": "Insights/Conclusion\nPick either “Insights” or “Conclusion” as the section title depending on what makes more sense.\nDescribe the primary findings from your EDA and modeling sections as appropriate to the main question/objective. You can reproduce the figure from your summary if that helps.\n\nLimitations and Future Work\nThis section should include further exploration of the limitations of your modeling approach. Some avenues of exploration include:\n\nWho/what is being poorly predicted by your model? Why?\nHow might someone improve the data collection or analysis in the future?\nAre the assumptions behind your analytical methods justified?\nAre there ethical concerns about how the data was collected or how the results of the analysis could be used in the real world?"
   },
   {
-    "objectID": "projects/index.html",
-    "href": "projects/index.html",
-    "title": "Projects",
-    "section": "",
-    "text": "Predicting House Prices with Machine Learning\n\n\n\nPython\n\nMachine Learning\n\nData Cleaning\n\n\n\nThis project involves using machine learning algorithms to predict house prices based on various features such as location, size, and amenities. It includes data cleaning, feature engineering, and model selection.\n\n\n\nJan 1, 2024\n\n\n\n\n\n\n\n\n\n\n\n\n\nCustomer Segmentation Using Clustering Techniques\n\n\n\nR\n\nMachine Learning\n\nClustering\n\nStatistical Modelling\n\n\n\nThis project focuses on segmenting customers into different groups based on their purchasing behavior and demographics. It uses clustering algorithms like K-means and hierarchical clustering to identify distinct customer segments.\n\n\n\nApr 1, 2024\n\n\n\n\n\n\n\n\n\n\n\n\n\nVisualizing Global CO2 Emissions\n\n\n\nR\n\nData Visualization\n\nEnvironmental Science\n\n\n\nThis project involves creating visualizations to show trends in global CO2 emissions over time. It includes data extraction from public databases, data cleaning, and using visualization libraries to create interactive charts and graphs.\n\n\n\nJul 1, 2024\n\n\n\n\n\n\nNo matching items"
-  },
-  {
     "objectID": "index.html",
     "href": "index.html",
     "title": "Jason Soto",
@@ -88,6 +81,20 @@
     "href": "index.html#experience",
     "title": "Jason Soto",
     "section": "Experience",
-    "text": "Experience\nJack in the Box | Cashier | May 2022 - August 2022\nKnott’s Berry Farm | Games Attendant | February 2023 - March 2026"
+    "text": "Experience\nJack in the Box | Cashier | May 2022 - August 2022\nKnott’s Berry Farm | Games Attendant | February 2023 - Now"
+  },
+  {
+    "objectID": "final_project.html#data-wrangling",
+    "href": "final_project.html#data-wrangling",
+    "title": "Final Project",
+    "section": "Data Wrangling",
+    "text": "Data Wrangling\n\npokemon &lt;- pokemon |&gt;\n  dplyr::select(\n    id, pokemon, height, weight, base_experience, type_1, type_2,\n    hp, attack, defense, special_attack, special_defense, speed,\n    generation_id\n  ) |&gt;\n  dplyr::filter(generation_id &lt; 6) |&gt;\n  mutate(total_stats = hp + attack + defense + special_attack + special_defense + speed)\n\nset.seed(67)\n\npokemon_split &lt;- initial_split(pokemon, prop = .8)\n\npokemon_train &lt;- training(pokemon_split)\npokemon_test &lt;- testing(pokemon_split)"
+  },
+  {
+    "objectID": "final_project.html#extra-credit",
+    "href": "final_project.html#extra-credit",
+    "title": "Final Project",
+    "section": "Extra Credit",
+    "text": "Extra Credit\nIf you went to any off-campus events this semester that involved statistics or math in some way (e.g., DataFest, GSB off-campus events, etc.) or attended on-campus events that brought in potential future colleagues/mentors from off-campus (e.g., grad school/career fairs, TSC events, etc.), you can write a paragraph at the end of the reflection telling me what you went to and what you got out of it (if it was a waste of time, tell me why).\nFor each paragraph, you get an extra 5 points on this assignment, up to 20 points."
   }
 ]
