@@ -9,6 +9,7 @@ Remember to replace all of the instructions with your text!
 This section should include:
 
 * Your main question or objective
+My main objective is to see if it is possible to somewhat be able to predict a Pokemon's type based off of their base stats.
 * The main insight(s) from your project
 * A figure that supplements that insight, along with accompanying text describing the figure. This figure can be a cleaned-up version of a visualization you produced in EDA or a visualization using your final model.
 
@@ -25,6 +26,14 @@ here::i_am("final_project.qmd")
 
 This section describes what you are investigating in your project and why you are investigating it. You should provide enough contextual background and information that someone with a limited background can understand the broad outlines of the topic being investigated.
 
+My investigation revolves around the Pokemon franchise, more specifically the statistical data of certain Pokemon in their games. This statistical data consists of their health, attack, defense, special attack, special defense, and speed. This info determines the raw strength of a Pokemon along with their level they may be. Each Pokemon has a type, like fire and water and such. With a total of 18 types, there are many differences between each Pokemon. The purpose of types is that it creates strategic advantages as some are stronger than others, some may be immune to others, and so on and so forth. Some Pokemon may even have two types, but I am focusing mostly on their primary type.
+
+My initial thoughts were to determine if certain types tend to have a superior average total of stats. That was kind of simple so I delved into the idea that it may be possible that types might have patterns in their base stats, like rock types might have better defense. This eventually grew to our final idea, can we predict a Pokemon's type based off stats?
+
+So, I am investigating if certain patterns exist between primary typing and base stats. This pattern will be found by and used in Multinomial Logistic Regression. I plan to use this to predict a Pokemon's primary type based off their base stats. I am investigating out of pure curiousity and passion for Pokemon and to find out if I can truly apply what i have learned in class towards independent "research" and datasets.
+
+I am investigating this out of pure curiosity. I do find it interesting if we can get a somewhat accurate type predictor based of off base stats.
+
 ## Packages Used In This Analysis
 
 This section lists the packages used in the analysis. You should have a single chunk that loads the packages followed by a description of why you are using each package. Please use individual package names rather than tidyverse and tidymodels, to make it clear which specific packages are being used.
@@ -34,48 +43,77 @@ This section lists the packages used in the analysis. You should have a single c
 #| message: false
 #| warning: false
 
-library(here)
-library(readr)
-library(dplyr)
-library(ggplot2)
-library(rsample)
-library(tidymodels)
-library(broom)
-library(tidyverse)
-library(tidyclust)
-library(dendextend)
-library(factoextra)
-library(kknn)
-library(forcats)
-library(MASS)
-library(nnet)
-```
+library(here)        # File path management and here::i_am()
+library(readr)       # Reading data files such as CSVs
+library(dplyr)       # Data wrangling: select, filter, mutate, summarise, arrange
+library(rsample)     # Train/test splits and cross-validation
+library(ggplot2)     # Data visualization and graphs
+library(tidyr)       # Data reshaping: pivot_longer()
+library(broom)       # augment() and tidying model outputs
+library(factoextra)  # Cluster visualization: fviz_cluster()
+library(kknn)        # K-nearest neighbors engine
+library(forcats)     # Factor reordering functions like fct_infreq() and fct_reorder()
+library(nnet)        # Multinomial logistic regression engine
+library(recipes)     # Preprocessing and recipe steps like step_normalize()
+library(workflows)   # Combining models and recipes into workflows
+library(parsnip)     # Model specifications: nearest_neighbor(), multinom_reg()
+library(tune)        # Hyperparameter tuning: tune_grid(), select_best()
+library(yardstick)   # Model evaluation metrics: mn_log_loss()
+library(pokemon)     # Pokemon dataset
 
-You should follow the template table below. Each row of the table contains the package name in brackets, a link to the package website, and (on the right side) a description of what you used the package for. If you can't find a link to the package website, or you're having trouble getting the link to work, don't worry about including it.
+```
 
 | Package | Use |
 |-------------------------------|----------------------------------------|
 | [here](https://github.com/jennybc/here_here) | to easily load and save data |
 | [readr](https://readr.tidyverse.org/) | to import the CSV file data |
 | [dplyr](https://dplyr.tidyverse.org/) | to massage and summarize data |
-| [rsample](https://rsample.tidymodels.org/) | to split data into training and test sets |
+| [rsample](https://rsample.tidymodels.org/) | to split data into training and test sets and for cross-validation |
 | [ggplot2](https://ggplot2.tidyverse.org/) | to create nice-looking and informative graphs |
+| [broom](https://broom.tidymodels.org/) | to augment data |
+| [factoextra](https://cran.r-project.org/web/packages/factoextra/index.html) | to visualize clusters |
+| [kknn](https://cran.r-project.org/web/packages/kknn/index.html) | to use its engine for K-Nearest Neighbors |
+| [forcats](https://forcats.tidyverse.org/) | to factor reorder |
+| [nnet](https://cran.r-project.org/web/packages/nnet/index.html) | to use its engine for Multinomial Linear Regression |
+| [recipes](https://recipes.tidymodels.org/index.html) | to build recipes for workflows |
+| [workflows](https://workflows.tidymodels.org/index.html) | to combine models and recipes to build workflows |
+| [parsnip](https://parsnip.tidymodels.org/index.html) | to compute Multinomial Linear Regression |
+| [tune](https://tune.tidymodels.org/index.html) | to select best tunes |
+| [yardstick](https://yardstick.tidymodels.org/index.html) | to use mn_log_loss() for model evaluation |
+| [pokemon](https://cran.r-project.org/web/packages/pokemon/readme/README.html) | to use its data set |
 
 ## Data Description
 
-This section should describe the data that you are using, the source of the data (including a link if appropriate), and how the data was originally collected. You should be able to just clean up the Data Description section from Project 2.
+  An observation in this dataset presents a Pokemon as featured in their debut game, rather than any later appearances or alternate form (Deoxys). The various game stats data included are their base stats (HP, attack, defense, special attack, special defense, and speed) as featured in their debut game, along with a total base stat value, height, weight, Pokedex ID, and their generation id. There are 649 observations with 15 different variables.
 
-At the end of the section you should import the data, unless it's already in one of the packages you loaded.
+  This CRAN dataset was collected by William Amorim and published in 2023. Based on linked sources, I would assume stats data was collected from Bulbapedia, a reliable and community-driven online encyclopedia dedicated to the Pokemon franchise, and from a GitHub that hosts data for Pokemon as well. A separate GitHub was used to link to Pokemon images.
 
-```{r}
-#| label: import data
-#| warning: false
-
-```
+  Indexing issues are caused by Mega Pokemon and by alternate versions of Pokemon, so I subsetted the dataset. Another reason for this was due to my lack of interest in the Pokemon past the 5th generation. So, Pokemon removed were any beyond the 5th generation. A few variables were removed too, such as 2 columns with urls that link to images, 3 columns that contained hex codes to their main colors, species id variable, and the 2 egg group variables. This is due to the fact that they will be useless here. The species id variable was removed since it was the same has the id variable, and egg groups are just irrelevant to my narrative. I also added a total stats variable that sums up all 6 of their base stats for a singular variable.
 
 ## Data Wrangling (Optional Section)
 
 If you did any data wrangling on Project 2, include it here. If you are creating training and test sets for predictive modeling, you should also include that code in an appropriate place in this section.
+
+```{r}
+#| label: Data Wrangling 
+
+pokemon <- pokemon |>
+  dplyr::select(
+    id, pokemon, height, weight, base_experience, type_1, type_2,
+    hp, attack, defense, special_attack, special_defense, speed,
+    generation_id
+  ) |>
+  dplyr::filter(generation_id < 6) |>
+  mutate(total_stats = hp + attack + defense + special_attack + special_defense + speed)
+
+set.seed(67)
+
+pokemon_split <- initial_split(pokemon, prop = .8)
+
+pokemon_train <- training(pokemon_split)
+pokemon_test <- testing(pokemon_split)
+
+```
 
 ## Exploratory Data Analysis
 
@@ -86,6 +124,35 @@ This section should include the code, figures, and accompanying text for the exp
 The section should include the code, output, and accompanying descriptions for *one* supervised or unsupervised learning model, as appropriate to your question or objective. The descriptions should include some conceptual or mathematical background explaining how the model works.
 
 You should be able to just clean up one of the modeling sections from Project 2.
+
+```{r}
+#| label: Multinomial Logistic Regression Setup
+
+set.seed(67)
+
+# Convert response to factor
+pokemon_train$type_1 <- as.factor(pokemon_train$type_1)
+
+multi_model <- multinom_reg(
+  mode = "classification",
+  engine = "nnet"
+)
+
+multi_recipe <- recipe(
+  type_1 ~ hp + attack + defense + special_attack + special_defense + speed,
+  data = pokemon_train
+)
+
+
+multi_wflow <- workflow() |>
+  add_model(multi_model) |>
+  add_recipe(multi_recipe)
+
+multi_fit <- fit(multi_wflow, data = pokemon_train)
+
+multi_fit
+
+```
 
 ## Insights/Conclusion
 

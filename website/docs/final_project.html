@@ -75,7 +75,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="site_libs/quarto-html/quarto-syntax-highlighting-dark-707d8167ce6003fca903bfe2be84ab7f.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="site_libs/bootstrap/bootstrap-2356c382e18153ec303789b5b070b1d6.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="dark">
+<link href="site_libs/bootstrap/bootstrap-fb3e5635438bccf0dab5229522f1a3db.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="dark">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -178,7 +178,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h2 class="anchored" data-anchor-id="summary">Summary</h2>
 <p>This section should include:</p>
 <ul>
-<li>Your main question or objective</li>
+<li>Your main question or objective My main objective is to see if it is possible to somewhat be able to predict a Pokemon’s type based off of their base stats.</li>
 <li>The main insight(s) from your project</li>
 <li>A figure that supplements that insight, along with accompanying text describing the figure. This figure can be a cleaned-up version of a visualization you produced in EDA or a visualization using your final model.</li>
 </ul>
@@ -186,28 +186,30 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="motivation-and-context" class="level2">
 <h2 class="anchored" data-anchor-id="motivation-and-context">Motivation and Context</h2>
 <p>This section describes what you are investigating in your project and why you are investigating it. You should provide enough contextual background and information that someone with a limited background can understand the broad outlines of the topic being investigated.</p>
+<p>I am investigating if certain patterns exist between primary typing and base stats. This pattern will be found by and used in Multinomial Logistic Regression. I plan to use this to predict a Pokemon’s primary type based off their base stats. I am investigating out of pure curiousity and passion for Pokemon and to find out if I can truly apply what i have learned in class towards independent “research” and datasets.</p>
 </section>
 <section id="packages-used-in-this-analysis" class="level2">
 <h2 class="anchored" data-anchor-id="packages-used-in-this-analysis">Packages Used In This Analysis</h2>
 <p>This section lists the packages used in the analysis. You should have a single chunk that loads the packages followed by a description of why you are using each package. Please use individual package names rather than tidyverse and tidymodels, to make it clear which specific packages are being used.</p>
 <div class="cell">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(here)</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(readr)</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(dplyr)</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(ggplot2)</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(rsample)</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tidymodels)</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(broom)</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tidyverse)</span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tidyclust)</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(dendextend)</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(factoextra)</span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(kknn)</span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(forcats)</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(MASS)</span>
-<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(nnet)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(here)        <span class="co"># File path management and here::i_am()</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(readr)       <span class="co"># Reading data files such as CSVs</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(dplyr)       <span class="co"># Data wrangling: select, filter, mutate, summarise, arrange</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(rsample)     <span class="co"># Train/test splits and cross-validation</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(ggplot2)     <span class="co"># Data visualization and graphs</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tidyr)       <span class="co"># Data reshaping: pivot_longer()</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(broom)       <span class="co"># augment() and tidying model outputs</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(factoextra)  <span class="co"># Cluster visualization: fviz_cluster()</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(kknn)        <span class="co"># K-nearest neighbors engine</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(forcats)     <span class="co"># Factor reordering functions like fct_infreq() and fct_reorder()</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(nnet)        <span class="co"># Multinomial logistic regression engine</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(recipes)     <span class="co"># Preprocessing and recipe steps like step_normalize()</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(workflows)   <span class="co"># Combining models and recipes into workflows</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(parsnip)     <span class="co"># Model specifications: nearest_neighbor(), multinom_reg()</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tune)        <span class="co"># Hyperparameter tuning: tune_grid(), select_best()</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(yardstick)   <span class="co"># Model evaluation metrics: mn_log_loss()</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(pokemon)     <span class="co"># Pokemon dataset</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
-<p>You should follow the template table below. Each row of the table contains the package name in brackets, a link to the package website, and (on the right side) a description of what you used the package for. If you can’t find a link to the package website, or you’re having trouble getting the link to work, don’t worry about including it.</p>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -230,23 +232,85 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </tr>
 <tr class="even">
 <td><a href="https://rsample.tidymodels.org/">rsample</a></td>
-<td>to split data into training and test sets</td>
+<td>to split data into training and test sets and for cross-validation</td>
 </tr>
 <tr class="odd">
 <td><a href="https://ggplot2.tidyverse.org/">ggplot2</a></td>
 <td>to create nice-looking and informative graphs</td>
+</tr>
+<tr class="even">
+<td><a href="https://broom.tidymodels.org/">broom</a></td>
+<td>to augment data</td>
+</tr>
+<tr class="odd">
+<td><a href="https://cran.r-project.org/web/packages/factoextra/index.html">factoextra</a></td>
+<td>to visualize clusters</td>
+</tr>
+<tr class="even">
+<td><a href="https://cran.r-project.org/web/packages/kknn/index.html">kknn</a></td>
+<td>to use its engine for K-Nearest Neighbors</td>
+</tr>
+<tr class="odd">
+<td><a href="https://forcats.tidyverse.org/">forcats</a></td>
+<td>to factor reorder</td>
+</tr>
+<tr class="even">
+<td><a href="https://cran.r-project.org/web/packages/nnet/index.html">nnet</a></td>
+<td>to use its engine for Multinomial Linear Regression</td>
+</tr>
+<tr class="odd">
+<td><a href="https://recipes.tidymodels.org/index.html">recipes</a></td>
+<td>to build recipes for workflows</td>
+</tr>
+<tr class="even">
+<td><a href="https://workflows.tidymodels.org/index.html">workflows</a></td>
+<td>to combine models and recipes to build workflows</td>
+</tr>
+<tr class="odd">
+<td><a href="https://parsnip.tidymodels.org/index.html">parsnip</a></td>
+<td>to compute Multinomial Linear Regression</td>
+</tr>
+<tr class="even">
+<td><a href="https://tune.tidymodels.org/index.html">tune</a></td>
+<td>to select best tunes</td>
+</tr>
+<tr class="odd">
+<td><a href="https://yardstick.tidymodels.org/index.html">yardstick</a></td>
+<td>to use mn_log_loss() for model evaluation</td>
+</tr>
+<tr class="even">
+<td><a href="https://cran.r-project.org/web/packages/pokemon/readme/README.html">pokemon</a></td>
+<td>to use its data set</td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="data-description" class="level2">
 <h2 class="anchored" data-anchor-id="data-description">Data Description</h2>
-<p>This section should describe the data that you are using, the source of the data (including a link if appropriate), and how the data was originally collected. You should be able to just clean up the Data Description section from Project 2.</p>
-<p>At the end of the section you should import the data, unless it’s already in one of the packages you loaded.</p>
+<p>An observation in this dataset presents a Pokemon as featured in their debut game, rather than any later appearances or alternate form (Deoxys). The various game stats data included are their base stats (HP, attack, defense, special attack, special defense, and speed) as featured in their debut game, along with a total base stat value, height, weight, Pokedex ID, and their generation id. There are 649 observations with 15 different variables.</p>
+<p>This CRAN dataset was collected by William Amorim and published in 2023. Based on linked sources, I would assume stats data was collected from Bulbapedia, a reliable and community-driven online encyclopedia dedicated to the Pokemon franchise, and from a GitHub that hosts data for Pokemon as well. A separate GitHub was used to link to Pokemon images.</p>
+<p>Indexing issues are caused by Mega Pokemon and by alternate versions of Pokemon, so I subsetted the dataset. Another reason for this was due to my lack of interest in the Pokemon past the 5th generation. So, Pokemon removed were any beyond the 5th generation. A few variables were removed too, such as 2 columns with urls that link to images, 3 columns that contained hex codes to their main colors, species id variable, and the 2 egg group variables. This is due to the fact that they will be useless here. The species id variable was removed since it was the same has the id variable, and egg groups are just irrelevant to my narrative. I also added a total stats variable that sums up all 6 of their base stats for a singular variable.</p>
 </section>
 <section id="data-wrangling-optional-section" class="level2">
 <h2 class="anchored" data-anchor-id="data-wrangling-optional-section">Data Wrangling (Optional Section)</h2>
 <p>If you did any data wrangling on Project 2, include it here. If you are creating training and test sets for predictive modeling, you should also include that code in an appropriate place in this section.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>pokemon <span class="ot">&lt;-</span> pokemon <span class="sc">|&gt;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    id, pokemon, height, weight, base_experience, type_1, type_2,</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    hp, attack, defense, special_attack, special_defense, speed,</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    generation_id</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">filter</span>(generation_id <span class="sc">&lt;</span> <span class="dv">6</span>) <span class="sc">|&gt;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">total_stats =</span> hp <span class="sc">+</span> attack <span class="sc">+</span> defense <span class="sc">+</span> special_attack <span class="sc">+</span> special_defense <span class="sc">+</span> speed)</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">67</span>)</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>pokemon_split <span class="ot">&lt;-</span> <span class="fu">initial_split</span>(pokemon, <span class="at">prop =</span> .<span class="dv">8</span>)</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>pokemon_train <span class="ot">&lt;-</span> <span class="fu">training</span>(pokemon_split)</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>pokemon_test <span class="ot">&lt;-</span> <span class="fu">testing</span>(pokemon_split)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
 </section>
 <section id="exploratory-data-analysis" class="level2">
 <h2 class="anchored" data-anchor-id="exploratory-data-analysis">Exploratory Data Analysis</h2>
@@ -256,6 +320,84 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h2 class="anchored" data-anchor-id="modeling">Modeling</h2>
 <p>The section should include the code, output, and accompanying descriptions for <em>one</em> supervised or unsupervised learning model, as appropriate to your question or objective. The descriptions should include some conceptual or mathematical background explaining how the model works.</p>
 <p>You should be able to just clean up one of the modeling sections from Project 2.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">67</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Convert response to factor</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>pokemon_train<span class="sc">$</span>type_1 <span class="ot">&lt;-</span> <span class="fu">as.factor</span>(pokemon_train<span class="sc">$</span>type_1)</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>multi_model <span class="ot">&lt;-</span> <span class="fu">multinom_reg</span>(</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">mode =</span> <span class="st">"classification"</span>,</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">engine =</span> <span class="st">"nnet"</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>multi_recipe <span class="ot">&lt;-</span> <span class="fu">recipe</span>(</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>  type_1 <span class="sc">~</span> hp <span class="sc">+</span> attack <span class="sc">+</span> defense <span class="sc">+</span> special_attack <span class="sc">+</span> special_defense <span class="sc">+</span> speed,</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>  <span class="at">data =</span> pokemon_train</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>multi_wflow <span class="ot">&lt;-</span> <span class="fu">workflow</span>() <span class="sc">|&gt;</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_model</span>(multi_model) <span class="sc">|&gt;</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_recipe</span>(multi_recipe)</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>multi_fit <span class="ot">&lt;-</span> <span class="fu">fit</span>(multi_wflow, <span class="at">data =</span> pokemon_train)</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>multi_fit</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>══ Workflow [trained] ══════════════════════════════════════════════════════════
+Preprocessor: Recipe
+Model: multinom_reg()
+
+── Preprocessor ────────────────────────────────────────────────────────────────
+0 Recipe Steps
+
+── Model ───────────────────────────────────────────────────────────────────────
+Call:
+nnet::multinom(formula = ..y ~ ., data = data, trace = FALSE)
+
+Coefficients:
+         (Intercept)           hp        attack      defense special_attack
+dark      -1.0848929 -0.009934398  0.0292567655 -0.032024970    0.020307153
+dragon    -4.2937918  0.003719990  0.0440860203 -0.026163355    0.027491407
+electric  -1.4145423 -0.003031547 -0.0086419143 -0.041755116    0.049343477
+fairy     -1.5207751  0.031542804 -0.0329485326 -0.022367451    0.048995535
+fighting  -0.7337090  0.044287661  0.0439935004 -0.039702884   -0.038939770
+fire      -2.0566650  0.014642723  0.0228317670 -0.045147137    0.046248512
+flying    -3.2523877 -0.001121738  0.0188964867 -0.046096637    0.052512310
+ghost     -1.7249900 -0.027804200 -0.0220178256 -0.004908067    0.067240387
+grass      0.9594435  0.010347736 -0.0098610437 -0.022316488    0.049113314
+ground    -2.0852761  0.040294896  0.0211540723  0.004942715   -0.021339422
+ice       -1.4414800  0.032878983 -0.0015704348 -0.059387344    0.034835116
+normal     0.2796489  0.055830371  0.0029186855 -0.051258069   -0.015097912
+poison    -1.4922010  0.035902896 -0.0002854029 -0.004995321    0.001077835
+psychic   -1.6288593  0.032964819 -0.0465187547 -0.033350953    0.068961012
+rock      -2.2321131  0.002259195  0.0230146848  0.021007534    0.009756278
+steel     -2.6789985  0.014843454 -0.0007472992  0.028313561    0.010091283
+water     -0.3657149  0.043456668 -0.0212987914 -0.006841032    0.033153224
+         special_defense        speed
+dark       -0.0124600548  0.003243822
+dragon     -0.0025799361 -0.007907373
+electric   -0.0071221425  0.018451953
+fairy       0.0103414122 -0.048547137
+fighting   -0.0082733295 -0.030383333
+fire       -0.0012233976 -0.016877533
+flying     -0.0132385788 -0.009160374
+ghost       0.0117317184 -0.023588135
+grass      -0.0095196216 -0.029777622
+ground     -0.0275841989 -0.006010240
+ice         0.0205391755 -0.019471972
+normal     -0.0009312282  0.007278079
+poison     -0.0236386625  0.002287045
+psychic     0.0019815252 -0.008200270
+rock       -0.0190060048 -0.026290653
+steel      -0.0170088935 -0.023481340
+water      -0.0227638533 -0.009734301
+
+Residual Deviance: 2288.182 
+AIC: 2526.182 </code></pre>
+</div>
+</div>
 </section>
 <section id="insightsconclusion" class="level2">
 <h2 class="anchored" data-anchor-id="insightsconclusion">Insights/Conclusion</h2>

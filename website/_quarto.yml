@@ -22,14 +22,15 @@ website:
       
 format:
   html:
+    code-block-bg: "#171717"
+    code-block-border-left: "#817E7E"
     fontcolor: "white"
-    linkcolor: "#0000FF"
-    backgroundcolor: "#1F1F1F"
-    monobackgroundcolor: "#4F4F4F"
+    linkcolor: "#289EC6"
+    backgroundcolor: "#121212"
+    monobackgroundcolor: "#171717"
     mainfont: "Avnir light"
     monofont: "monospace"
     max-width: ""
     fontsize: ""
     linestretch: ""
-    theme: [cosmo, styles.scss]
-
+    theme: darkly
