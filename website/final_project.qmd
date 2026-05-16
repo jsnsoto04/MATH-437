@@ -2,20 +2,11 @@
 title: Final Project
 ---
 
-Remember to replace all of the instructions with your text!
-
 ## Summary
 
-This section should include:
+  My main objective in this project was to investigate whether a Pokemon’s type could be predicted based of its base stats through Multinomial Logistic Regression modeling
 
-* Your main question or objective
-My main objective is to see if it is possible to somewhat be able to predict a Pokemon's type based off of their base stats.
-
-* The main insight(s) from your project
-x
-
-* A figure that supplements that insight, along with accompanying text describing the figure. This figure can be a cleaned-up version of a visualization you produced in EDA or a visualization using your final model.
-x
+  My analysis showed that Pokemon types do display statistical patterns in their base stats. Certain types tend to perform better in specific attributes, like Steel and Rock types having higher defense or Electric and Flying types having higher speed. Dragon types also tended to have some of the highest overall stats. The Multinomial Logistic Regression model achieved an accuracy of around 25% for both primary and secondary type prediction. Although this accuracy may initially seem low, randomly guessing among 18 possible types would technically only achieve an accuracy around 5.6%. This suggests that Pokemon base stats does contain some important information related to Pokemon typing, which implies that there is patterns between base stats and types.
 
 ## Motivation and Context
 
@@ -28,17 +19,15 @@ x
 here::i_am("final_project.qmd")
 ```
 
-My investigation revolves around the Pokemon franchise, more specifically the statistical data of certain Pokemon in their games. This statistical data consists of their health, attack, defense, special attack, special defense, and speed. This info determines the raw strength of a Pokemon along with their level they may be. Each Pokemon has a type, like fire and water and such. With a total of 18 types, there are many differences between each Pokemon. The purpose of types is that it creates strategic advantages as some are stronger than others, some may be immune to others, and so on and so forth. Some Pokemon may even have two types, but I am focusing mostly on their primary type.
+  My investigation revolves around the Pokemon franchise, more specifically the statistical data of certain Pokemon in their mainline games. This statistical data consists of their health, attack, defense, special attack, special defense, and speed. This info determines the raw strength of a Pokemon along with the level they may be. Each Pokemon has a type, like fire and water and such. With a total of 18 types, there are many differences between each Pokemon. The purpose of types is to create variety and strategic advantages as some are stronger than others, some may be immune to others, and so on and so forth. Some Pokemon may even have two types, but I am mostly focusing on their primary type.
 
-My initial thoughts were to determine if certain types tend to have a superior average total of stats. That was kind of simple so I delved into the idea that it may be possible that types might have patterns in their base stats, like rock types might have better defense. This eventually grew to our final idea, can we predict a Pokemon's type based off stats?
+  My initial thoughts were to determine if certain types tend to have a superior average total of stats. That was kind of simple so I delved into the idea that it may be possible that types might have patterns in their base stats, like rock types might have better defense. This eventually grew to our final idea, can we predict a Pokemon's type based off stats?
 
-So, I am investigating if we can predict a Pokemon's primary type based off their base stats. This will be done by  Multinomial Logistic Regression. Accurate predictions may very well imply that certain patterns exist between primary typing and base stats.
+  So, I am investigating if we can predict a Pokemon's primary type based off their base stats. This will be done by  Multinomial Logistic Regression. Accurate predictions may very well imply that certain patterns exist between primary typing and base stats.
 
-I am investigating out of pure curiosity and passion for Pokemon and to find out if I can truly apply what i have learned in class towards independent "research" and datasets. I do also find it interesting if we can get a somewhat accurate type predictor based of off base stats.
+  I am investigating out of pure curiosity and passion for Pokemon and to find out if I can truly apply what i have learned in class towards independent "research" and datasets. I do also find it interesting if we can get a somewhat accurate type predictor based of off base stats.
 
 ## Packages Used In This Analysis
-
-This section lists the packages used in the analysis. You should have a single chunk that loads the packages followed by a description of why you are using each package. Please use individual package names rather than tidyverse and tidymodels, to make it clear which specific packages are being used.
 
 ```{r}
 #| label: load packages
@@ -104,7 +93,11 @@ pokemon <- pokemon |>
     generation_id
   ) |>
   dplyr::filter(generation_id < 6) |>
-  mutate(total_stats = hp + attack + defense + special_attack + special_defense + speed)
+  mutate(total_stats = hp + attack + defense + special_attack + special_defense + speed) |>
+    mutate(
+    type_1 = as.factor(type_1),
+    type_2 = as.factor(type_2)
+  )
 
 set.seed(67)
 
@@ -113,17 +106,207 @@ pokemon_split <- initial_split(pokemon, prop = .8)
 pokemon_train <- training(pokemon_split)
 pokemon_test <- testing(pokemon_split)
 
+# Seperate data set specifically for EDA
+pokemon_types <- pokemon_train |>
+  pivot_longer(cols = c(type_1, type_2),
+               names_to = "type_slot",
+               values_to = "type") |>
+  filter(!is.na(type))
+
 ```
 
 ## Exploratory Data Analysis
 
-This section should include the code, figures, and accompanying text for the exploratory data analysis that is relevant to your objective. You should be able to just clean up the EDA section from Project 2.
+  A few figures are featured below as I believe it is important to make type distributions known. I believe this is very crucial context as it shows there will be a margin of error caused by the fact that the Flying type is almost always a secondary type rather than a primary type. Due to lack of time and knowledge, I have not been able to find a proper solution around this that includes both types in a prediction, yet, does not double count a Pokemon like in pokemon_types. This will lead us to create models that will predict a Pokemon's primary type, and a separate model that will predict a Pokemon's secondary type.
+
+```{r}
+#| label:  Relevant Plots
+
+ggplot(pokemon_train,
+       aes(x = fct_infreq(type_1))) +
+  geom_bar(fill = "#75bde6",
+           color = "#323232") +
+  labs(title = "Distribution of Primary Types",
+       x = "Type",
+       y = "Count")
+
+ggplot(pokemon_train, 
+       aes(x = fct_infreq(type_2))) +
+  geom_bar(fill = "#75bde6",
+           color = "#323232") +
+  labs(title = "Distribution of Secondary Types",
+       x = "Type",
+       y = "Count")
+
+ggplot(pokemon_train |> filter(!is.na(type_2)), 
+       aes(x = fct_infreq(type_2))) +
+  geom_bar(fill = "#75bde6",
+           color = "#323232") +
+  labs(title = "Distribution of Secondary Types (No NA)",
+       x = "Type",
+       y = "Count")
+
+```
+
+  Now with these plots, it is very important to mention the type imbalances and the possible skews we will see. The distributions show that some primary types, such as Water and Normal, are very numerous, while others, like Dragon and Ice, are much less numerous. This imbalance may affect prediction performance because there will be fewer examples to learn from for certain types, like a sort of watering down.
+
+  Next, I have plenty of graphs that I would like to share. They are not crazy important, but give good visuals to what we will be working with and what we could be expecting in outcomes from our prediction models. Once again, feel free to just take a light glance as needed, this is not important important, just interesting.
+
+  The dataset I created for this part of the EDA, pokemon_types, double counts each Pokemon if they have two types, that way their secondary type is counted towards the graphs in a better way. This is not to be confused for being double counted in the various generations, just types. This is to somewhat "fix" the issue we have with Flying and to display cleaner pattering without a dozen graphs.
+
+```{r}
+#| label: Bivariate and Multivariate Trends
+
+ggplot(pokemon_types,
+       aes(x = fct_reorder(type, hp, .fun = mean),
+           y = hp)) +
+  geom_boxplot(fill = "#75bde6") +
+  labs(title = "Distribution of Health Stats by Type",
+       x = "Type",
+       y = "Health Stats")
+
+ggplot(pokemon_types,
+       aes(x = fct_reorder(type, attack, .fun = mean),
+           y = attack)) +
+  geom_boxplot(fill = "#75bde6") +
+  labs(title = "Distribution of Attack Stats by Type",
+       x = "Type",
+       y = "Attack Stats")
+
+ggplot(pokemon_types,
+       aes(x = fct_reorder(type, defense, .fun = mean),
+           y = defense)) +
+  geom_boxplot(fill = "#75bde6") +
+  labs(title = "Distribution of Defense Stats by Type",
+       x = "Type",
+       y = "Defense Stats")
+
+ggplot(pokemon_types,
+       aes(x = fct_reorder(type, special_attack, .fun = mean),
+           y = special_attack)) +
+  geom_boxplot(fill = "#75bde6") +
+  labs(title = "Distribution of Special Attack Stats by Type",
+       x = "Type",
+       y = "Special Attack Stats")
+
+ggplot(pokemon_types,
+       aes(x = fct_reorder(type, special_defense, .fun = mean),
+           y = special_defense)) +
+  geom_boxplot(fill = "#75bde6") +
+  labs(title = "Distribution of Special Defense Stats by Type",
+       x = "Type",
+       y = "Special Defense Stats")
+
+ggplot(pokemon_types,
+       aes(x = fct_reorder(type, speed, .fun = mean),
+           y = speed)) +
+  geom_boxplot(fill = "#75bde6") +
+  labs(title = "Distribution of Speed Stats by Type",
+       x = "Type",
+       y = "Speed Stats")
+
+```
+
+  The purpose of this exploration was to see if certain Pokemon types showed patterns or superiority towards certain base stats. One idea that a player might have is that Dragon types are one of the best types, we will see that pattern.
+
+  First, on average Pokemon with better health stats tend to be Fighting, Normal, and Dragon. As for attack stats, Dragon and Fighting take it as they are more physical Pokemon, while Psychic is near the end due to its more "special" specialty, with it being Psychic and all. Next, it is very clear why Steel and Rock immensely over shadow the rest in defense, with Ground and Dragon following behind. As for special attack we have Fire, Psychic, Electric, and Dragon. Special defense on average is very uniform, but we do have Psychic, Steel, and Ghost in the lead. Finally, we have Electric, Flying, and Dragon in the lead for speed which makes much sense. So if you were to go up against any Pokemon of those three types, they're more likely to go first.
+
+  One key detail is Dragon types did end up being very superior in many of these stats. This could be due to the fact of their pseudo-legendary status. I will elaborate more on that after the next analysis.
+
+  Overall, this analysis shows that Pokemon types may very be associated or correlated with certain statistical patterns and advantages to some extent rather than being randomly distributed across types. Statistics are even distributed in ways one could guess.
+
+  A possible follow-up question is whether certain Pokemon types are stronger overall based off their total base statistics, rather than individual attributes. Another idea is we can see which type is the strongest overall for each individual generation.
+
+```{r}
+#| label: Total Stats
+
+ggplot(pokemon_types,
+       aes(x = fct_reorder(type, total_stats, .fun = mean),
+           y = total_stats)) +
+  geom_boxplot(fill = "#75bde6") +
+  labs(title = "Distribution of Total Stats by Type",
+       x = "Type",
+       y = "Total Stats")
+
+ggplot(pokemon_types |> filter(generation_id == 1),
+       aes(x = fct_reorder(type, total_stats, .fun = mean),
+           y = total_stats)) +
+  geom_boxplot(fill = "#75bde6") +
+  labs(title = "Distribution of Total Stats by Type (Generation 1)",
+       x = "Type",
+       y = "Total Stats")
+
+ggplot(pokemon_types |> filter(generation_id == 2),
+       aes(x = fct_reorder(type, total_stats, .fun = mean),
+           y = total_stats)) +
+  geom_boxplot(fill = "#75bde6") +
+  labs(title = "Distribution of Total Stats by Type (Generation 2)",
+       x = "Type",
+       y = "Total Stats")
+
+ggplot(pokemon_types |> filter(generation_id == 3),
+       aes(x = fct_reorder(type, total_stats, .fun = mean),
+           y = total_stats)) +
+  geom_boxplot(fill = "#75bde6") +
+  labs(title = "Distribution of Total Stats by Type (Generation 3)",
+       x = "Type",
+       y = "Total Stats")
+
+ggplot(pokemon_types |> filter(generation_id == 4),
+       aes(x = fct_reorder(type, total_stats, .fun = mean),
+           y = total_stats)) +
+  geom_boxplot(fill = "#75bde6") +
+  labs(title = "Distribution of Total Stats by Type (Generation 4)",
+       x = "Type",
+       y = "Total Stats")
+
+ggplot(pokemon_types |> filter(generation_id == 5),
+       aes(x = fct_reorder(type, total_stats, .fun = mean),
+           y = total_stats)) +
+  geom_boxplot(fill = "#75bde6") +
+  labs(title = "Distribution of Total Stats by Type (Generation 5)",
+       x = "Type",
+       y = "Total Stats")
+
+```
+
+  Overall, Dragon types tend to be most statistically superior Pokemon, followed by Steel and Fire. However once again, Dragon Pokemon superiority may be due to the fact that there is a small number of them due to their pseudo-legendary status, and because of their status, they are intentionally designed to be powerful Pokemon rather than the type itself causing higher stats. Next, when we check by each generation, based off of just the Total Stats, Dragon remains the better type except for in the 1st generation, where Ice tends to be superior.
+
+  Finally, just to serve as a reminder, as I mentioned, the count for each type may cause possible biases in the box plots, so I included below some code that counts each type, just for one to take note of.
+
+```{r}
+#| label: Type Count
+
+pokemon_types |> dplyr::count(type, sort = TRUE)
+
+# Pokemon Type Count in Generation 1
+pokemon_types |> filter(generation_id == 1) |> dplyr::count(type, sort = TRUE)
+
+# Pokemon Type Count in Generation 2
+pokemon_types |> filter(generation_id == 2) |> dplyr::count(type, sort = TRUE)
+
+# Pokemon Type Count in Generation 3
+pokemon_types |> filter(generation_id == 3) |> dplyr::count(type, sort = TRUE)
+
+# Pokemon Type Count in Generation 4
+pokemon_types |> filter(generation_id == 4) |> dplyr::count(type, sort = TRUE)
+
+# Pokemon Type Count in Generation 5
+pokemon_types |> filter(generation_id == 5) |> dplyr::count(type, sort = TRUE)
+
+```
+
+  In conclusion, we should not determine these data analyses as absolute truth and superiority, but as said in the beginning, we should probably just interpret these results as patterns since these are just averages.
 
 ## Modeling
 
-The section should include the code, output, and accompanying descriptions for *one* supervised or unsupervised learning model, as appropriate to your question or objective. The descriptions should include some conceptual or mathematical background explaining how the model works.
+  As stated before, the model I selected was Multinomial Logistic Regression.
 
-You should be able to just clean up one of the modeling sections from Project 2.
+  To summarize, Multinomial Logistic Regression is a classification model used when the response variable has more than two possible categories. In this project, the response variable is a Pokemon’s primary type, which contains many different possible outcomes. The model uses predictor variables to estimate the probability that an observation belongs to each possible class.
+
+  The predictor variables used in this model are HP, attack, defense, special attack, special defense, and speed. The model looks for statistical relationships between these base stats and Pokemon type patterns. For each Pokemon, the model calculates probabilities of being each possible type over some baseline type selected by the model, which is Bug here. The type with the highest probability becomes the prediction.
+
+  We first convert type_1 into a factor variable. Next, classification is set as its mode and the multinomial regression model is specified using the nnet engine. A recipe is then created to define the relationship between the response and predictor variables. We also normalize all the predictors in the recipe step. This basically rescales the predictors onto a similar scale so that no single variable dominates any other. Finally, the workflow combines the recipe and model before fitting the model onto the training data.
 
 ```{r}
 #| label: Multinomial Logistic Regression Setup
@@ -132,49 +315,139 @@ set.seed(67)
 
 # Convert response to factor
 pokemon_train$type_1 <- as.factor(pokemon_train$type_1)
+pokemon_train$type_2 <- as.factor(pokemon_train$type_2)
 
 multi_model <- multinom_reg(
   mode = "classification",
   engine = "nnet"
 )
 
-multi_recipe <- recipe(
+multi_recipe_1 <- recipe(
   type_1 ~ hp + attack + defense + special_attack + special_defense + speed,
   data = pokemon_train
+) |>
+  step_normalize(all_predictors())
+
+multi_recipe_2 <- recipe(
+  type_2 ~ hp + attack + defense + special_attack + special_defense + speed,
+  data = pokemon_train
+) |>
+  step_normalize(all_predictors())
+
+multi_wflow_1 <- workflow() |>
+  add_model(multi_model) |>
+  add_recipe(multi_recipe_1)
+
+multi_wflow_2 <- workflow() |>
+  add_model(multi_model) |>
+  add_recipe(multi_recipe_2)
+
+multi_fit_1 <- fit(multi_wflow_1, data = pokemon_train)
+
+multi_fit_2 <- fit(multi_wflow_2, data = pokemon_train)
+
+multi_fit_1
+multi_fit_2
+
+```
+  Next, I will set up the predictions on the test set using the models.
+
+```{r}
+#| label: Predictions
+
+# Predict primary types
+type_1_predictions <- predict(
+  multi_fit_1,
+  new_data = pokemon_test
 )
 
+type_1_results <- pokemon_test |>
+  select(pokemon, type_1) |>
+  bind_cols(type_1_predictions)
 
-multi_wflow <- workflow() |>
-  add_model(multi_model) |>
-  add_recipe(multi_recipe)
+# Predict secondary types
 
-multi_fit <- fit(multi_wflow, data = pokemon_train)
+# Filter the NA secondaries first
+pokemon_test_type2 <- pokemon_test |>
+  filter(!is.na(type_2))
 
-multi_fit
+# Predict only on filtered data
+type_2_predictions <- predict(
+  multi_fit_2,
+  new_data = pokemon_test_type2
+)
+
+type_2_results <- pokemon_test_type2 |>
+  select(pokemon, type_2) |>
+  bind_cols(type_2_predictions)
+
+type_1_results
+type_2_results
 
 ```
 
-## Insights/Conclusion
+  With this predict function, based off the training data, we have our rows of predictions of each test set Pokemon. We see their type and our prediction. It is cool to see that we have accurately predicted some of the Pokemon. But, how accurate were we? I show that below.
 
-Pick either "Insights" or "Conclusion" as the section title depending on what makes more sense.
+```{r}
+#| label: Accuracy
 
-Describe the primary findings from your EDA and modeling sections as appropriate to the main question/objective. You can reproduce the figure from your summary if that helps.
+# Primary Type Accuracy
+accuracy(
+  type_1_results,
+  truth = type_1,
+  estimate = .pred_class
+)
+
+# Secondary Type Accuracy
+accuracy(
+  type_2_results,
+  truth = type_2,
+  estimate = .pred_class
+)
+
+```
+
+  As you can see, for both predicting Primary types, and predicting Secondary types, when the Pokemon did have a secondary that is, we are around an accuracy of 25%. That is pretty bad but considering there is 18 whole different types, and we are predicting based off of just base stats and not anything else like colors, physical features, egg types, height and weights, I would say 25% is not too bad. Next I have some pretty Confusion Matrices that easily visualize these predictions.
+
+```{r}
+#| label: Confusion Matrix
+
+# Primary Type Confusion Matrix
+conf_mat(
+  type_1_results,
+  truth = type_1,
+  estimate = .pred_class
+) |>
+  autoplot(type = "heatmap")
+
+# Secondary Type Confusion Matrix
+conf_mat(
+  type_2_results,
+  truth = type_2,
+  estimate = .pred_class
+) |>
+  autoplot(type = "heatmap")
+
+```
+
+  There is much commentary to be made on this heat map, but I fear there is not enough time, space, or reader interest to include this myself. One I could mention is that for example, the Normal primary type, the model was good, it nailed that prediction, 12 out of 17 times. However, it made too many Normal predictions, 37 to be exact. So 70.58% of Normal types were predicted correctly, but 32.43% of the models prediction of a Pokemon being a normal type, was wrong. Those are the type of comments and observations that could be made. We see a similar pattern with Flying Secondary types. These kind of things are what I believe is the byproduct of the type imbalances I mentioned earlier.
+
+## Conclusion
+
+  Overall, the main takeaway from this project is that Pokemon base stats do carry some information about typing, but not enough to make great accurate predictions on their own. From the EDA, we saw clear patterns between certain types and specific stats.
+  
+  However, when it came to actually predicting a Pokemon’s primary or secondary type using Multinomial Logistic Regression, the results were limited. The model achieved around 25% accuracy, which is better than random guessing across 18 types, but still not strong enough to be considered reliable. This suggests that while base stats are related to type, they do not determine it.
+
+  One important reason for this limitation is that Pokemon typing is not based purely on base stats. Types are influenced by game design decisions and balance. Because of this, there is a lot of overlap between types and many different types can share similar stats. This makes it very difficult for a model to clearly identify and separate types using only base stats.
+
+  In conclusion, this project shows that there is a some relationship between Pokemon types and base stats. This relationship is strong enough to create patterns and slightly better than random predictions, but not strong enough for precise classification.
 
 ### Limitations and Future Work
 
-This section should include further exploration of the limitations of your modeling approach. Some avenues of exploration include:
+  One of the main limitations is that base stats alone are not enough information to fully explain or predict Pokemon typing. Types are designed using a mix of gameplay balance, aesthetics, plot, and intended roles in battle, not just numerical stats. Because of this, we face a lot of overlap between types, which makes classification difficult for any statistical model.
 
--   Who/what is being poorly predicted by your model? Why?
--   How might someone improve the data collection or analysis in the future?
--   Are the assumptions behind your analytical methods justified?
--   Are there ethical concerns about how the data was collected or how the results of the analysis could be used in the real world?
+  Another major issue is class imbalance. Some types, such as Water and Normal, appear very frequently in the dataset, while others like Dragon or Ice appear much less often. This creates bias in both the model and predictions, since the model has far fewer examples to learn from for rare types. This is made visible in the confusion matrices, where the model tends to over-predict more common types and struggle with less frequent ones.
+  
+  For reference in future work, I was made aware it was actually a great idea to include hp and weight into the model. However, direct plug in to the recipe wasn't the best way to do it, and lack of time prevented me from truly exploring this idea. Time was a limitation, I am sure if I included these variables the right way, our prediction could have gotten a bit more accurate
 
-## Extra Credit
-
-If you went to any off-campus events this semester that involved statistics or math in some way (e.g., DataFest, GSB off-campus events, etc.) or attended on-campus events that brought in potential future colleagues/mentors from off-campus (e.g., grad school/career fairs, TSC events, etc.), you can write a paragraph at the end of the reflection telling me what you went to and what you got out of it (if it was a waste of time, tell me why).
-
-For each paragraph, you get an extra 5 points on this assignment, up to 20 points.
-
-
-
-
+  As for the dataset itself, there is really no way to improve data collection, all the stats we need are in the data. I believe there are no ethical concerns about how this data was collected or how the results can be used. Information is picked up directly from the games from dedicated fans, and the analysis does nothing but maybe help a player strategize their playthrough in some way. This is due to the fact that this is just a nerdy and mathematical look into Pokemon, surely nothing crazy could happen.

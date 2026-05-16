@@ -107,7 +107,10 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 
 <meta property="og:title" content="Final Project – Home">
 <meta property="og:description" content="">
+<meta property="og:image" content="https://jsnsoto04.github.io/MATH-437/final_project_files/figure-html/Relevant Plots-1.png">
 <meta property="og:site_name" content="Home">
+<meta property="og:image:height" content="960">
+<meta property="og:image:width" content="1344">
 </head>
 
 <body class="nav-fixed fullcontent quarto-light">
@@ -173,26 +176,20 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </header>
 
 
-<p>Remember to replace all of the instructions with your text!</p>
 <section id="summary" class="level2">
 <h2 class="anchored" data-anchor-id="summary">Summary</h2>
-<p>This section should include:</p>
-<ul>
-<li><p>Your main question or objective My main objective is to see if it is possible to somewhat be able to predict a Pokemon’s type based off of their base stats.</p></li>
-<li><p>The main insight(s) from your project x</p></li>
-<li><p>A figure that supplements that insight, along with accompanying text describing the figure. This figure can be a cleaned-up version of a visualization you produced in EDA or a visualization using your final model. x</p></li>
-</ul>
+<p>My main objective in this project was to investigate whether a Pokemon’s type could be predicted based of its base stats through Multinomial Logistic Regression modeling</p>
+<p>My analysis showed that Pokemon types do display statistical patterns in their base stats. Certain types tend to perform better in specific attributes, like Steel and Rock types having higher defense or Electric and Flying types having higher speed. Dragon types also tended to have some of the highest overall stats. The Multinomial Logistic Regression model achieved an accuracy of around 25% for both primary and secondary type prediction. Although this accuracy may initially seem low, randomly guessing among 18 possible types would technically only achieve an accuracy around 5.6%. This suggests that Pokemon base stats does contain some important information related to Pokemon typing, which implies that there is patterns between base stats and types.</p>
 </section>
 <section id="motivation-and-context" class="level2">
 <h2 class="anchored" data-anchor-id="motivation-and-context">Motivation and Context</h2>
-<p>My investigation revolves around the Pokemon franchise, more specifically the statistical data of certain Pokemon in their games. This statistical data consists of their health, attack, defense, special attack, special defense, and speed. This info determines the raw strength of a Pokemon along with their level they may be. Each Pokemon has a type, like fire and water and such. With a total of 18 types, there are many differences between each Pokemon. The purpose of types is that it creates strategic advantages as some are stronger than others, some may be immune to others, and so on and so forth. Some Pokemon may even have two types, but I am focusing mostly on their primary type.</p>
+<p>My investigation revolves around the Pokemon franchise, more specifically the statistical data of certain Pokemon in their mainline games. This statistical data consists of their health, attack, defense, special attack, special defense, and speed. This info determines the raw strength of a Pokemon along with the level they may be. Each Pokemon has a type, like fire and water and such. With a total of 18 types, there are many differences between each Pokemon. The purpose of types is to create variety and strategic advantages as some are stronger than others, some may be immune to others, and so on and so forth. Some Pokemon may even have two types, but I am mostly focusing on their primary type.</p>
 <p>My initial thoughts were to determine if certain types tend to have a superior average total of stats. That was kind of simple so I delved into the idea that it may be possible that types might have patterns in their base stats, like rock types might have better defense. This eventually grew to our final idea, can we predict a Pokemon’s type based off stats?</p>
 <p>So, I am investigating if we can predict a Pokemon’s primary type based off their base stats. This will be done by Multinomial Logistic Regression. Accurate predictions may very well imply that certain patterns exist between primary typing and base stats.</p>
 <p>I am investigating out of pure curiosity and passion for Pokemon and to find out if I can truly apply what i have learned in class towards independent “research” and datasets. I do also find it interesting if we can get a somewhat accurate type predictor based of off base stats.</p>
 </section>
 <section id="packages-used-in-this-analysis" class="level2">
 <h2 class="anchored" data-anchor-id="packages-used-in-this-analysis">Packages Used In This Analysis</h2>
-<p>This section lists the packages used in the analysis. You should have a single chunk that loads the packages followed by a description of why you are using each package. Please use individual package names rather than tidyverse and tidymodels, to make it clear which specific packages are being used.</p>
 <div class="cell">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(here)        <span class="co"># File path management and here::i_am()</span></span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(readr)       <span class="co"># Reading data files such as CSVs</span></span>
@@ -303,124 +300,699 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    generation_id</span>
 <span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
 <span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">filter</span>(generation_id <span class="sc">&lt;</span> <span class="dv">6</span>) <span class="sc">|&gt;</span></span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">total_stats =</span> hp <span class="sc">+</span> attack <span class="sc">+</span> defense <span class="sc">+</span> special_attack <span class="sc">+</span> special_defense <span class="sc">+</span> speed)</span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">67</span>)</span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>pokemon_split <span class="ot">&lt;-</span> <span class="fu">initial_split</span>(pokemon, <span class="at">prop =</span> .<span class="dv">8</span>)</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">total_stats =</span> hp <span class="sc">+</span> attack <span class="sc">+</span> defense <span class="sc">+</span> special_attack <span class="sc">+</span> special_defense <span class="sc">+</span> speed) <span class="sc">|&gt;</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">type_1 =</span> <span class="fu">as.factor</span>(type_1),</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">type_2 =</span> <span class="fu">as.factor</span>(type_2)</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>  )</span>
 <span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>pokemon_train <span class="ot">&lt;-</span> <span class="fu">training</span>(pokemon_split)</span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>pokemon_test <span class="ot">&lt;-</span> <span class="fu">testing</span>(pokemon_split)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">67</span>)</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>pokemon_split <span class="ot">&lt;-</span> <span class="fu">initial_split</span>(pokemon, <span class="at">prop =</span> .<span class="dv">8</span>)</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>pokemon_train <span class="ot">&lt;-</span> <span class="fu">training</span>(pokemon_split)</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>pokemon_test <span class="ot">&lt;-</span> <span class="fu">testing</span>(pokemon_split)</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a><span class="co"># Seperate data set specifically for EDA</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>pokemon_types <span class="ot">&lt;-</span> pokemon_train <span class="sc">|&gt;</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_longer</span>(<span class="at">cols =</span> <span class="fu">c</span>(type_1, type_2),</span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>               <span class="at">names_to =</span> <span class="st">"type_slot"</span>,</span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>               <span class="at">values_to =</span> <span class="st">"type"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(type))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 </section>
 <section id="exploratory-data-analysis" class="level2">
 <h2 class="anchored" data-anchor-id="exploratory-data-analysis">Exploratory Data Analysis</h2>
-<p>This section should include the code, figures, and accompanying text for the exploratory data analysis that is relevant to your objective. You should be able to just clean up the EDA section from Project 2.</p>
+<p>A few figures are featured below as I believe it is important to make type distributions known. I believe this is very crucial context as it shows there will be a margin of error caused by the fact that the Flying type is almost always a secondary type rather than a primary type. Due to lack of time and knowledge, I have not been able to find a proper solution around this that includes both types in a prediction, yet, does not double count a Pokemon like in pokemon_types. This will lead us to create models that will predict a Pokemon’s primary type, and a separate model that will predict a Pokemon’s secondary type.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(pokemon_train,</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>       <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">fct_infreq</span>(type_1))) <span class="sc">+</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_bar</span>(<span class="at">fill =</span> <span class="st">"#75bde6"</span>,</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>           <span class="at">color =</span> <span class="st">"#323232"</span>) <span class="sc">+</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Distribution of Primary Types"</span>,</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">"Type"</span>,</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Count"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="final_project_files/figure-html/Relevant Plots-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(pokemon_train, </span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>       <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">fct_infreq</span>(type_2))) <span class="sc">+</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_bar</span>(<span class="at">fill =</span> <span class="st">"#75bde6"</span>,</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>           <span class="at">color =</span> <span class="st">"#323232"</span>) <span class="sc">+</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Distribution of Secondary Types"</span>,</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">"Type"</span>,</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Count"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="final_project_files/figure-html/Relevant Plots-2.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(pokemon_train <span class="sc">|&gt;</span> <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(type_2)), </span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>       <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">fct_infreq</span>(type_2))) <span class="sc">+</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_bar</span>(<span class="at">fill =</span> <span class="st">"#75bde6"</span>,</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>           <span class="at">color =</span> <span class="st">"#323232"</span>) <span class="sc">+</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Distribution of Secondary Types (No NA)"</span>,</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">"Type"</span>,</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Count"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="final_project_files/figure-html/Relevant Plots-3.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Now with these plots, it is very important to mention the type imbalances and the possible skews we will see. The distributions show that some primary types, such as Water and Normal, are very numerous, while others, like Dragon and Ice, are much less numerous. This imbalance may affect prediction performance because there will be fewer examples to learn from for certain types, like a sort of watering down.</p>
+<p>Next, I have plenty of graphs that I would like to share. They are not crazy important, but give good visuals to what we will be working with and what we could be expecting in outcomes from our prediction models. Once again, feel free to just take a light glance as needed, this is not important important, just interesting.</p>
+<p>The dataset I created for this part of the EDA, pokemon_types, double counts each Pokemon if they have two types, that way their secondary type is counted towards the graphs in a better way. This is not to be confused for being double counted in the various generations, just types. This is to somewhat “fix” the issue we have with Flying and to display cleaner pattering without a dozen graphs.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(pokemon_types,</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>       <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">fct_reorder</span>(type, hp, <span class="at">.fun =</span> mean),</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>           <span class="at">y =</span> hp)) <span class="sc">+</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_boxplot</span>(<span class="at">fill =</span> <span class="st">"#75bde6"</span>) <span class="sc">+</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Distribution of Health Stats by Type"</span>,</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">"Type"</span>,</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Health Stats"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="final_project_files/figure-html/Bivariate and Multivariate Trends-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(pokemon_types,</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>       <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">fct_reorder</span>(type, attack, <span class="at">.fun =</span> mean),</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>           <span class="at">y =</span> attack)) <span class="sc">+</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_boxplot</span>(<span class="at">fill =</span> <span class="st">"#75bde6"</span>) <span class="sc">+</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Distribution of Attack Stats by Type"</span>,</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">"Type"</span>,</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Attack Stats"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="final_project_files/figure-html/Bivariate and Multivariate Trends-2.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(pokemon_types,</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>       <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">fct_reorder</span>(type, defense, <span class="at">.fun =</span> mean),</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>           <span class="at">y =</span> defense)) <span class="sc">+</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_boxplot</span>(<span class="at">fill =</span> <span class="st">"#75bde6"</span>) <span class="sc">+</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Distribution of Defense Stats by Type"</span>,</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">"Type"</span>,</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Defense Stats"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="final_project_files/figure-html/Bivariate and Multivariate Trends-3.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(pokemon_types,</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>       <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">fct_reorder</span>(type, special_attack, <span class="at">.fun =</span> mean),</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>           <span class="at">y =</span> special_attack)) <span class="sc">+</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_boxplot</span>(<span class="at">fill =</span> <span class="st">"#75bde6"</span>) <span class="sc">+</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Distribution of Special Attack Stats by Type"</span>,</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">"Type"</span>,</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Special Attack Stats"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="final_project_files/figure-html/Bivariate and Multivariate Trends-4.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(pokemon_types,</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>       <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">fct_reorder</span>(type, special_defense, <span class="at">.fun =</span> mean),</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>           <span class="at">y =</span> special_defense)) <span class="sc">+</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_boxplot</span>(<span class="at">fill =</span> <span class="st">"#75bde6"</span>) <span class="sc">+</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Distribution of Special Defense Stats by Type"</span>,</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">"Type"</span>,</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Special Defense Stats"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="final_project_files/figure-html/Bivariate and Multivariate Trends-5.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(pokemon_types,</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>       <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">fct_reorder</span>(type, speed, <span class="at">.fun =</span> mean),</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>           <span class="at">y =</span> speed)) <span class="sc">+</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_boxplot</span>(<span class="at">fill =</span> <span class="st">"#75bde6"</span>) <span class="sc">+</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Distribution of Speed Stats by Type"</span>,</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">"Type"</span>,</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Speed Stats"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="final_project_files/figure-html/Bivariate and Multivariate Trends-6.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>The purpose of this exploration was to see if certain Pokemon types showed patterns or superiority towards certain base stats. One idea that a player might have is that Dragon types are one of the best types, we will see that pattern.</p>
+<p>First, on average Pokemon with better health stats tend to be Fighting, Normal, and Dragon. As for attack stats, Dragon and Fighting take it as they are more physical Pokemon, while Psychic is near the end due to its more “special” specialty, with it being Psychic and all. Next, it is very clear why Steel and Rock immensely over shadow the rest in defense, with Ground and Dragon following behind. As for special attack we have Fire, Psychic, Electric, and Dragon. Special defense on average is very uniform, but we do have Psychic, Steel, and Ghost in the lead. Finally, we have Electric, Flying, and Dragon in the lead for speed which makes much sense. So if you were to go up against any Pokemon of those three types, they’re more likely to go first.</p>
+<p>One key detail is Dragon types did end up being very superior in many of these stats. This could be due to the fact of their pseudo-legendary status. I will elaborate more on that after the next analysis.</p>
+<p>Overall, this analysis shows that Pokemon types may very be associated or correlated with certain statistical patterns and advantages to some extent rather than being randomly distributed across types. Statistics are even distributed in ways one could guess.</p>
+<p>A possible follow-up question is whether certain Pokemon types are stronger overall based off their total base statistics, rather than individual attributes. Another idea is we can see which type is the strongest overall for each individual generation.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(pokemon_types,</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>       <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">fct_reorder</span>(type, total_stats, <span class="at">.fun =</span> mean),</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>           <span class="at">y =</span> total_stats)) <span class="sc">+</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_boxplot</span>(<span class="at">fill =</span> <span class="st">"#75bde6"</span>) <span class="sc">+</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Distribution of Total Stats by Type"</span>,</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">"Type"</span>,</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Total Stats"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="final_project_files/figure-html/Total Stats-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(pokemon_types <span class="sc">|&gt;</span> <span class="fu">filter</span>(generation_id <span class="sc">==</span> <span class="dv">1</span>),</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>       <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">fct_reorder</span>(type, total_stats, <span class="at">.fun =</span> mean),</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>           <span class="at">y =</span> total_stats)) <span class="sc">+</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_boxplot</span>(<span class="at">fill =</span> <span class="st">"#75bde6"</span>) <span class="sc">+</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Distribution of Total Stats by Type (Generation 1)"</span>,</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">"Type"</span>,</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Total Stats"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="final_project_files/figure-html/Total Stats-2.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(pokemon_types <span class="sc">|&gt;</span> <span class="fu">filter</span>(generation_id <span class="sc">==</span> <span class="dv">2</span>),</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>       <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">fct_reorder</span>(type, total_stats, <span class="at">.fun =</span> mean),</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>           <span class="at">y =</span> total_stats)) <span class="sc">+</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_boxplot</span>(<span class="at">fill =</span> <span class="st">"#75bde6"</span>) <span class="sc">+</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Distribution of Total Stats by Type (Generation 2)"</span>,</span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">"Type"</span>,</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Total Stats"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="final_project_files/figure-html/Total Stats-3.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(pokemon_types <span class="sc">|&gt;</span> <span class="fu">filter</span>(generation_id <span class="sc">==</span> <span class="dv">3</span>),</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>       <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">fct_reorder</span>(type, total_stats, <span class="at">.fun =</span> mean),</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>           <span class="at">y =</span> total_stats)) <span class="sc">+</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_boxplot</span>(<span class="at">fill =</span> <span class="st">"#75bde6"</span>) <span class="sc">+</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Distribution of Total Stats by Type (Generation 3)"</span>,</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">"Type"</span>,</span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Total Stats"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="final_project_files/figure-html/Total Stats-4.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(pokemon_types <span class="sc">|&gt;</span> <span class="fu">filter</span>(generation_id <span class="sc">==</span> <span class="dv">4</span>),</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>       <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">fct_reorder</span>(type, total_stats, <span class="at">.fun =</span> mean),</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>           <span class="at">y =</span> total_stats)) <span class="sc">+</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_boxplot</span>(<span class="at">fill =</span> <span class="st">"#75bde6"</span>) <span class="sc">+</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Distribution of Total Stats by Type (Generation 4)"</span>,</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">"Type"</span>,</span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Total Stats"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="final_project_files/figure-html/Total Stats-5.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(pokemon_types <span class="sc">|&gt;</span> <span class="fu">filter</span>(generation_id <span class="sc">==</span> <span class="dv">5</span>),</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>       <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">fct_reorder</span>(type, total_stats, <span class="at">.fun =</span> mean),</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>           <span class="at">y =</span> total_stats)) <span class="sc">+</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_boxplot</span>(<span class="at">fill =</span> <span class="st">"#75bde6"</span>) <span class="sc">+</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Distribution of Total Stats by Type (Generation 5)"</span>,</span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">"Type"</span>,</span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Total Stats"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="final_project_files/figure-html/Total Stats-6.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Overall, Dragon types tend to be most statistically superior Pokemon, followed by Steel and Fire. However once again, Dragon Pokemon superiority may be due to the fact that there is a small number of them due to their pseudo-legendary status, and because of their status, they are intentionally designed to be powerful Pokemon rather than the type itself causing higher stats. Next, when we check by each generation, based off of just the Total Stats, Dragon remains the better type except for in the 1st generation, where Ice tends to be superior.</p>
+<p>Finally, just to serve as a reminder, as I mentioned, the count for each type may cause possible biases in the box plots, so I included below some code that counts each type, just for one to take note of.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>pokemon_types <span class="sc">|&gt;</span> dplyr<span class="sc">::</span><span class="fu">count</span>(type, <span class="at">sort =</span> <span class="cn">TRUE</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 18 × 2
+   type         n
+   &lt;fct&gt;    &lt;int&gt;
+ 1 water       87
+ 2 normal      71
+ 3 flying      65
+ 4 grass       60
+ 5 psychic     59
+ 6 bug         54
+ 7 ground      49
+ 8 poison      46
+ 9 fire        38
+10 rock        36
+11 electric    32
+12 dark        31
+13 steel       28
+14 ice         26
+15 fighting    25
+16 dragon      23
+17 ghost       23
+18 fairy       18</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Pokemon Type Count in Generation 1</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>pokemon_types <span class="sc">|&gt;</span> <span class="fu">filter</span>(generation_id <span class="sc">==</span> <span class="dv">1</span>) <span class="sc">|&gt;</span> dplyr<span class="sc">::</span><span class="fu">count</span>(type, <span class="at">sort =</span> <span class="cn">TRUE</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 17 × 2
+   type         n
+   &lt;fct&gt;    &lt;int&gt;
+ 1 poison      26
+ 2 water       25
+ 3 normal      18
+ 4 flying      15
+ 5 bug         11
+ 6 ground      11
+ 7 grass       10
+ 8 psychic     10
+ 9 rock        10
+10 fire         9
+11 electric     8
+12 fighting     5
+13 fairy        4
+14 ice          4
+15 dragon       2
+16 ghost        2
+17 steel        1</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Pokemon Type Count in Generation 2</span></span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>pokemon_types <span class="sc">|&gt;</span> <span class="fu">filter</span>(generation_id <span class="sc">==</span> <span class="dv">2</span>) <span class="sc">|&gt;</span> dplyr<span class="sc">::</span><span class="fu">count</span>(type, <span class="at">sort =</span> <span class="cn">TRUE</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 18 × 2
+   type         n
+   &lt;fct&gt;    &lt;int&gt;
+ 1 flying      17
+ 2 normal      13
+ 3 water       13
+ 4 psychic     10
+ 5 bug          8
+ 6 grass        8
+ 7 ground       8
+ 8 electric     6
+ 9 fire         6
+10 fairy        5
+11 ice          5
+12 rock         5
+13 dark         4
+14 poison       3
+15 steel        3
+16 fighting     2
+17 dragon       1
+18 ghost        1</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb24"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Pokemon Type Count in Generation 3</span></span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>pokemon_types <span class="sc">|&gt;</span> <span class="fu">filter</span>(generation_id <span class="sc">==</span> <span class="dv">3</span>) <span class="sc">|&gt;</span> dplyr<span class="sc">::</span><span class="fu">count</span>(type, <span class="at">sort =</span> <span class="cn">TRUE</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 18 × 2
+   type         n
+   &lt;fct&gt;    &lt;int&gt;
+ 1 water       24
+ 2 psychic     16
+ 3 grass       13
+ 4 normal      13
+ 5 bug         11
+ 6 ground      10
+ 7 rock        10
+ 8 dark         8
+ 9 flying       8
+10 steel        8
+11 dragon       6
+12 ice          6
+13 fairy        5
+14 fighting     5
+15 fire         5
+16 ghost        5
+17 poison       4
+18 electric     3</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb26"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Pokemon Type Count in Generation 4</span></span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a>pokemon_types <span class="sc">|&gt;</span> <span class="fu">filter</span>(generation_id <span class="sc">==</span> <span class="dv">4</span>) <span class="sc">|&gt;</span> dplyr<span class="sc">::</span><span class="fu">count</span>(type, <span class="at">sort =</span> <span class="cn">TRUE</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 18 × 2
+   type         n
+   &lt;fct&gt;    &lt;int&gt;
+ 1 grass       13
+ 2 normal      11
+ 3 water       10
+ 4 flying       9
+ 5 ground       9
+ 6 bug          8
+ 7 psychic      8
+ 8 steel        7
+ 9 dark         6
+10 ghost        6
+11 poison       6
+12 dragon       5
+13 electric     5
+14 ice          5
+15 fire         4
+16 rock         4
+17 fairy        2
+18 fighting     2</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb28"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Pokemon Type Count in Generation 5</span></span>
+<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a>pokemon_types <span class="sc">|&gt;</span> <span class="fu">filter</span>(generation_id <span class="sc">==</span> <span class="dv">5</span>) <span class="sc">|&gt;</span> dplyr<span class="sc">::</span><span class="fu">count</span>(type, <span class="at">sort =</span> <span class="cn">TRUE</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 18 × 2
+   type         n
+   &lt;fct&gt;    &lt;int&gt;
+ 1 bug         16
+ 2 flying      16
+ 3 grass       16
+ 4 normal      16
+ 5 psychic     15
+ 6 water       15
+ 7 fire        14
+ 8 dark        13
+ 9 fighting    11
+10 ground      11
+11 electric    10
+12 dragon       9
+13 ghost        9
+14 steel        9
+15 poison       7
+16 rock         7
+17 ice          6
+18 fairy        2</code></pre>
+</div>
+</div>
+<p>In conclusion, we should not determine these data analyses as absolute truth and superiority, but as said in the beginning, we should probably just interpret these results as patterns since these are just averages.</p>
 </section>
 <section id="modeling" class="level2">
 <h2 class="anchored" data-anchor-id="modeling">Modeling</h2>
-<p>The section should include the code, output, and accompanying descriptions for <em>one</em> supervised or unsupervised learning model, as appropriate to your question or objective. The descriptions should include some conceptual or mathematical background explaining how the model works.</p>
-<p>You should be able to just clean up one of the modeling sections from Project 2.</p>
+<p>As stated before, the model I selected was Multinomial Logistic Regression.</p>
+<p>To summarize, Multinomial Logistic Regression is a classification model used when the response variable has more than two possible categories. In this project, the response variable is a Pokemon’s primary type, which contains many different possible outcomes. The model uses predictor variables to estimate the probability that an observation belongs to each possible class.</p>
+<p>The predictor variables used in this model are HP, attack, defense, special attack, special defense, and speed. The model looks for statistical relationships between these base stats and Pokemon type patterns. For each Pokemon, the model calculates probabilities of being each possible type over some baseline type selected by the model, which is Bug here. The type with the highest probability becomes the prediction.</p>
+<p>We first convert type_1 into a factor variable. Next, classification is set as its mode and the multinomial regression model is specified using the nnet engine. A recipe is then created to define the relationship between the response and predictor variables. We also normalize all the predictors in the recipe step. This basically rescales the predictors onto a similar scale so that no single variable dominates any other. Finally, the workflow combines the recipe and model before fitting the model onto the training data.</p>
 <div class="cell">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">67</span>)</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Convert response to factor</span></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>pokemon_train<span class="sc">$</span>type_1 <span class="ot">&lt;-</span> <span class="fu">as.factor</span>(pokemon_train<span class="sc">$</span>type_1)</span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>multi_model <span class="ot">&lt;-</span> <span class="fu">multinom_reg</span>(</span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">mode =</span> <span class="st">"classification"</span>,</span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">engine =</span> <span class="st">"nnet"</span></span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>multi_recipe <span class="ot">&lt;-</span> <span class="fu">recipe</span>(</span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>  type_1 <span class="sc">~</span> hp <span class="sc">+</span> attack <span class="sc">+</span> defense <span class="sc">+</span> special_attack <span class="sc">+</span> special_defense <span class="sc">+</span> speed,</span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>  <span class="at">data =</span> pokemon_train</span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>multi_wflow <span class="ot">&lt;-</span> <span class="fu">workflow</span>() <span class="sc">|&gt;</span></span>
-<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_model</span>(multi_model) <span class="sc">|&gt;</span></span>
-<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_recipe</span>(multi_recipe)</span>
-<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>multi_fit <span class="ot">&lt;-</span> <span class="fu">fit</span>(multi_wflow, <span class="at">data =</span> pokemon_train)</span>
-<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>multi_fit</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb30"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">67</span>)</span>
+<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Convert response to factor</span></span>
+<span id="cb30-4"><a href="#cb30-4" aria-hidden="true" tabindex="-1"></a>pokemon_train<span class="sc">$</span>type_1 <span class="ot">&lt;-</span> <span class="fu">as.factor</span>(pokemon_train<span class="sc">$</span>type_1)</span>
+<span id="cb30-5"><a href="#cb30-5" aria-hidden="true" tabindex="-1"></a>pokemon_train<span class="sc">$</span>type_2 <span class="ot">&lt;-</span> <span class="fu">as.factor</span>(pokemon_train<span class="sc">$</span>type_2)</span>
+<span id="cb30-6"><a href="#cb30-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb30-7"><a href="#cb30-7" aria-hidden="true" tabindex="-1"></a>multi_model <span class="ot">&lt;-</span> <span class="fu">multinom_reg</span>(</span>
+<span id="cb30-8"><a href="#cb30-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">mode =</span> <span class="st">"classification"</span>,</span>
+<span id="cb30-9"><a href="#cb30-9" aria-hidden="true" tabindex="-1"></a>  <span class="at">engine =</span> <span class="st">"nnet"</span></span>
+<span id="cb30-10"><a href="#cb30-10" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb30-11"><a href="#cb30-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb30-12"><a href="#cb30-12" aria-hidden="true" tabindex="-1"></a>multi_recipe_1 <span class="ot">&lt;-</span> <span class="fu">recipe</span>(</span>
+<span id="cb30-13"><a href="#cb30-13" aria-hidden="true" tabindex="-1"></a>  type_1 <span class="sc">~</span> hp <span class="sc">+</span> attack <span class="sc">+</span> defense <span class="sc">+</span> special_attack <span class="sc">+</span> special_defense <span class="sc">+</span> speed,</span>
+<span id="cb30-14"><a href="#cb30-14" aria-hidden="true" tabindex="-1"></a>  <span class="at">data =</span> pokemon_train</span>
+<span id="cb30-15"><a href="#cb30-15" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span></span>
+<span id="cb30-16"><a href="#cb30-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">step_normalize</span>(<span class="fu">all_predictors</span>())</span>
+<span id="cb30-17"><a href="#cb30-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb30-18"><a href="#cb30-18" aria-hidden="true" tabindex="-1"></a>multi_recipe_2 <span class="ot">&lt;-</span> <span class="fu">recipe</span>(</span>
+<span id="cb30-19"><a href="#cb30-19" aria-hidden="true" tabindex="-1"></a>  type_2 <span class="sc">~</span> hp <span class="sc">+</span> attack <span class="sc">+</span> defense <span class="sc">+</span> special_attack <span class="sc">+</span> special_defense <span class="sc">+</span> speed,</span>
+<span id="cb30-20"><a href="#cb30-20" aria-hidden="true" tabindex="-1"></a>  <span class="at">data =</span> pokemon_train</span>
+<span id="cb30-21"><a href="#cb30-21" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span></span>
+<span id="cb30-22"><a href="#cb30-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">step_normalize</span>(<span class="fu">all_predictors</span>())</span>
+<span id="cb30-23"><a href="#cb30-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb30-24"><a href="#cb30-24" aria-hidden="true" tabindex="-1"></a>multi_wflow_1 <span class="ot">&lt;-</span> <span class="fu">workflow</span>() <span class="sc">|&gt;</span></span>
+<span id="cb30-25"><a href="#cb30-25" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_model</span>(multi_model) <span class="sc">|&gt;</span></span>
+<span id="cb30-26"><a href="#cb30-26" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_recipe</span>(multi_recipe_1)</span>
+<span id="cb30-27"><a href="#cb30-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb30-28"><a href="#cb30-28" aria-hidden="true" tabindex="-1"></a>multi_wflow_2 <span class="ot">&lt;-</span> <span class="fu">workflow</span>() <span class="sc">|&gt;</span></span>
+<span id="cb30-29"><a href="#cb30-29" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_model</span>(multi_model) <span class="sc">|&gt;</span></span>
+<span id="cb30-30"><a href="#cb30-30" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_recipe</span>(multi_recipe_2)</span>
+<span id="cb30-31"><a href="#cb30-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb30-32"><a href="#cb30-32" aria-hidden="true" tabindex="-1"></a>multi_fit_1 <span class="ot">&lt;-</span> <span class="fu">fit</span>(multi_wflow_1, <span class="at">data =</span> pokemon_train)</span>
+<span id="cb30-33"><a href="#cb30-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb30-34"><a href="#cb30-34" aria-hidden="true" tabindex="-1"></a>multi_fit_2 <span class="ot">&lt;-</span> <span class="fu">fit</span>(multi_wflow_2, <span class="at">data =</span> pokemon_train)</span>
+<span id="cb30-35"><a href="#cb30-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb30-36"><a href="#cb30-36" aria-hidden="true" tabindex="-1"></a>multi_fit_1</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>══ Workflow [trained] ══════════════════════════════════════════════════════════
 Preprocessor: Recipe
 Model: multinom_reg()
 
 ── Preprocessor ────────────────────────────────────────────────────────────────
-0 Recipe Steps
+1 Recipe Step
+
+• step_normalize()
 
 ── Model ───────────────────────────────────────────────────────────────────────
 Call:
 nnet::multinom(formula = ..y ~ ., data = data, trace = FALSE)
 
 Coefficients:
-         (Intercept)           hp        attack      defense special_attack
-dark      -1.0848929 -0.009934398  0.0292567655 -0.032024970    0.020307153
-dragon    -4.2937918  0.003719990  0.0440860203 -0.026163355    0.027491407
-electric  -1.4145423 -0.003031547 -0.0086419143 -0.041755116    0.049343477
-fairy     -1.5207751  0.031542804 -0.0329485326 -0.022367451    0.048995535
-fighting  -0.7337090  0.044287661  0.0439935004 -0.039702884   -0.038939770
-fire      -2.0566650  0.014642723  0.0228317670 -0.045147137    0.046248512
-flying    -3.2523877 -0.001121738  0.0188964867 -0.046096637    0.052512310
-ghost     -1.7249900 -0.027804200 -0.0220178256 -0.004908067    0.067240387
-grass      0.9594435  0.010347736 -0.0098610437 -0.022316488    0.049113314
-ground    -2.0852761  0.040294896  0.0211540723  0.004942715   -0.021339422
-ice       -1.4414800  0.032878983 -0.0015704348 -0.059387344    0.034835116
-normal     0.2796489  0.055830371  0.0029186855 -0.051258069   -0.015097912
-poison    -1.4922010  0.035902896 -0.0002854029 -0.004995321    0.001077835
-psychic   -1.6288593  0.032964819 -0.0465187547 -0.033350953    0.068961012
-rock      -2.2321131  0.002259195  0.0230146848  0.021007534    0.009756278
-steel     -2.6789985  0.014843454 -0.0007472992  0.028313561    0.010091283
-water     -0.3657149  0.043456668 -0.0212987914 -0.006841032    0.033153224
+         (Intercept)          hp      attack     defense special_attack
+dark      -1.0933855 -0.15666313  0.81636239 -0.79161932      0.6899030
+dragon    -1.4658046  0.29399999  1.30656368 -0.58905357      0.8236865
+electric  -1.0591239  0.01111775 -0.27782067 -0.96046795      1.4668280
+fairy     -2.6627795  1.07346917 -1.12809115 -0.37482611      1.4693386
+fighting  -2.6460620  1.37830898  1.38331520 -1.05020414     -1.2414833
+fire      -0.5519612  0.64519227  0.64054579 -1.17685463      1.4877801
+flying    -6.7474289  1.27904092  1.00874253 -2.45840850      2.3363047
+ghost     -1.8178734 -0.67037963 -0.67511376  0.08522736      2.0309523
+grass      0.1242793  0.40283220 -0.23268976 -0.43758050      1.5080932
+ground    -1.1240043  1.24841488  0.59143853  0.29898187     -0.5896146
+ice       -0.9333398  1.03562380 -0.11391465 -1.45061728      1.0872830
+normal     0.1515667  1.64403443  0.05025080 -1.30245405     -0.3392201
+poison    -0.7593154  1.11829797 -0.10976094  0.02550004      0.1753916
+psychic   -0.7223143  1.04923992 -1.36959301 -0.79025196      1.9837740
+rock      -1.1972886  0.29176805  0.64952264  0.70864694      0.2692206
+steel     -1.7559339  0.54245318 -0.05809688  0.99136030      0.3487100
+water      0.7306577  1.28336370 -0.61255381 -0.09737944      0.9847719
          special_defense        speed
-dark       -0.0124600548  0.003243822
-dragon     -0.0025799361 -0.007907373
-electric   -0.0071221425  0.018451953
-fairy       0.0103414122 -0.048547137
-fighting   -0.0082733295 -0.030383333
-fire       -0.0012233976 -0.016877533
-flying     -0.0132385788 -0.009160374
-ghost       0.0117317184 -0.023588135
-grass      -0.0095196216 -0.029777622
-ground     -0.0275841989 -0.006010240
-ice         0.0205391755 -0.019471972
-normal     -0.0009312282  0.007278079
-poison     -0.0236386625  0.002287045
-psychic     0.0019815252 -0.008200270
-rock       -0.0190060048 -0.026290653
-steel      -0.0170088935 -0.023481340
-water      -0.0227638533 -0.009734301
+dark         -0.32520306  0.296421235
+dragon       -0.03817341 -0.002123918
+electric     -0.18283189  0.680574452
+fairy         0.33293024 -1.187766812
+fighting     -0.22911612 -0.597472180
+fire         -0.12512247 -0.321731324
+flying        0.35138807  0.643188701
+ghost         0.30172950 -0.445534437
+grass        -0.21072140 -0.622063703
+ground       -0.67668750  0.020556241
+ice           0.52553945 -0.368019553
+normal       -0.04456141  0.354791458
+poison       -0.60707599  0.211355641
+psychic       0.04854060 -0.061418771
+rock         -0.44820466 -0.556060366
+steel        -0.41105027 -0.444177164
+water        -0.51292723 -0.131936153
 
-Residual Deviance: 2288.182 
-AIC: 2526.182 </code></pre>
+Residual Deviance: 2276.023 
+AIC: 2514.023 </code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb32"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>multi_fit_2</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>══ Workflow [trained] ══════════════════════════════════════════════════════════
+Preprocessor: Recipe
+Model: multinom_reg()
+
+── Preprocessor ────────────────────────────────────────────────────────────────
+1 Recipe Step
+
+• step_normalize()
+
+── Model ───────────────────────────────────────────────────────────────────────
+Call:
+nnet::multinom(formula = ..y ~ ., data = data, trace = FALSE)
+
+Coefficients:
+         (Intercept)        hp     attack    defense special_attack
+dark        5.589096 1.4157190  0.7327217 -0.4499252       4.966346
+dragon      5.607178 1.7177061 -0.5040806 -0.3229556       4.725833
+electric    5.204592 2.9090942 -1.8248736 -0.6362188       4.954021
+fairy       5.101067 2.5327700 -3.1765020 -0.7471307       5.090726
+fighting    5.915807 1.5582278  0.2836515 -0.7111772       4.664235
+fire        4.881330 1.4558061 -1.3914404 -1.0569667       6.523077
+flying      7.739379 1.8589073 -1.5814911 -0.6169069       4.290269
+ghost       5.376724 0.8416502  0.1825394 -1.4519211       4.265036
+grass       6.111013 1.3431425 -0.6734577 -0.4686489       4.145930
+ground      6.497159 2.4460578 -0.3499267  0.3430340       4.291964
+ice         5.388374 2.0332253 -0.3249962  0.1989738       4.482696
+poison      6.816742 0.7335325 -0.7004052 -1.4111243       5.168701
+psychic     6.450367 1.6741187 -1.4620274 -0.2468075       4.859656
+rock        2.263919 2.6495455 -0.6788530  2.0642205       3.710872
+steel       5.164752 0.4836095  0.3866253  0.9486240       4.950090
+water       5.711825 1.8563142 -1.4586959  0.4874283       5.343952
+         special_defense      speed
+dark         -1.39694771 -1.3716059
+dragon        0.09253110 -0.8903242
+electric     -0.63478704 -0.5253908
+fairy        -0.66428800 -1.1206557
+fighting     -0.12214845 -1.0133550
+fire         -0.41443397 -1.5754953
+flying       -0.09148207  0.1186636
+ghost         0.67314161 -1.9497255
+grass         0.66317136 -1.4755826
+ground       -1.56239864 -1.7145053
+ice          -0.58118986 -0.6951676
+poison        0.14518923 -1.4236335
+psychic       0.50143810 -1.2111106
+rock         -1.25783519 -3.7306865
+steel         0.03488240 -1.7891502
+water        -1.46953717 -1.5503170
+
+Residual Deviance: 976.6354 
+AIC: 1200.635 </code></pre>
 </div>
 </div>
+<p>Next, I will set up the predictions on the test set using the models.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb34"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Predict primary types</span></span>
+<span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a>type_1_predictions <span class="ot">&lt;-</span> <span class="fu">predict</span>(</span>
+<span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a>  multi_fit_1,</span>
+<span id="cb34-4"><a href="#cb34-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">new_data =</span> pokemon_test</span>
+<span id="cb34-5"><a href="#cb34-5" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb34-6"><a href="#cb34-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb34-7"><a href="#cb34-7" aria-hidden="true" tabindex="-1"></a>type_1_results <span class="ot">&lt;-</span> pokemon_test <span class="sc">|&gt;</span></span>
+<span id="cb34-8"><a href="#cb34-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(pokemon, type_1) <span class="sc">|&gt;</span></span>
+<span id="cb34-9"><a href="#cb34-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bind_cols</span>(type_1_predictions)</span>
+<span id="cb34-10"><a href="#cb34-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb34-11"><a href="#cb34-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Predict secondary types</span></span>
+<span id="cb34-12"><a href="#cb34-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb34-13"><a href="#cb34-13" aria-hidden="true" tabindex="-1"></a><span class="co"># Filter the NA secondaries first</span></span>
+<span id="cb34-14"><a href="#cb34-14" aria-hidden="true" tabindex="-1"></a>pokemon_test_type2 <span class="ot">&lt;-</span> pokemon_test <span class="sc">|&gt;</span></span>
+<span id="cb34-15"><a href="#cb34-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(type_2))</span>
+<span id="cb34-16"><a href="#cb34-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb34-17"><a href="#cb34-17" aria-hidden="true" tabindex="-1"></a><span class="co"># Predict only on filtered data</span></span>
+<span id="cb34-18"><a href="#cb34-18" aria-hidden="true" tabindex="-1"></a>type_2_predictions <span class="ot">&lt;-</span> <span class="fu">predict</span>(</span>
+<span id="cb34-19"><a href="#cb34-19" aria-hidden="true" tabindex="-1"></a>  multi_fit_2,</span>
+<span id="cb34-20"><a href="#cb34-20" aria-hidden="true" tabindex="-1"></a>  <span class="at">new_data =</span> pokemon_test_type2</span>
+<span id="cb34-21"><a href="#cb34-21" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb34-22"><a href="#cb34-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb34-23"><a href="#cb34-23" aria-hidden="true" tabindex="-1"></a>type_2_results <span class="ot">&lt;-</span> pokemon_test_type2 <span class="sc">|&gt;</span></span>
+<span id="cb34-24"><a href="#cb34-24" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(pokemon, type_2) <span class="sc">|&gt;</span></span>
+<span id="cb34-25"><a href="#cb34-25" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bind_cols</span>(type_2_predictions)</span>
+<span id="cb34-26"><a href="#cb34-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb34-27"><a href="#cb34-27" aria-hidden="true" tabindex="-1"></a>type_1_results</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 130 × 3
+   pokemon    type_1 .pred_class
+   &lt;chr&gt;      &lt;fct&gt;  &lt;fct&gt;      
+ 1 venusaur   grass  water      
+ 2 charmander fire   grass      
+ 3 pidgeot    normal normal     
+ 4 fearow     normal normal     
+ 5 arbok      poison bug        
+ 6 sandshrew  ground ground     
+ 7 nidoran-f  poison water      
+ 8 nidorina   poison water      
+ 9 vulpix     fire   bug        
+10 zubat      poison normal     
+# ℹ 120 more rows</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb36"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>type_2_results</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 57 × 3
+   pokemon   type_2  .pred_class
+   &lt;chr&gt;     &lt;fct&gt;   &lt;fct&gt;      
+ 1 venusaur  poison  flying     
+ 2 pidgeot   flying  flying     
+ 3 fearow    flying  flying     
+ 4 zubat     flying  flying     
+ 5 parasect  grass   steel      
+ 6 golem     ground  rock       
+ 7 magneton  steel   fire       
+ 8 dewgong   ice     flying     
+ 9 haunter   poison  flying     
+10 exeggcute psychic water      
+# ℹ 47 more rows</code></pre>
+</div>
+</div>
+<p>With this predict function, based off the training data, we have our rows of predictions of each test set Pokemon. We see their type and our prediction. It is cool to see that we have accurately predicted some of the Pokemon. But, how accurate were we? I show that below.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb38"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Primary Type Accuracy</span></span>
+<span id="cb38-2"><a href="#cb38-2" aria-hidden="true" tabindex="-1"></a><span class="fu">accuracy</span>(</span>
+<span id="cb38-3"><a href="#cb38-3" aria-hidden="true" tabindex="-1"></a>  type_1_results,</span>
+<span id="cb38-4"><a href="#cb38-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">truth =</span> type_1,</span>
+<span id="cb38-5"><a href="#cb38-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">estimate =</span> .pred_class</span>
+<span id="cb38-6"><a href="#cb38-6" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 1 × 3
+  .metric  .estimator .estimate
+  &lt;chr&gt;    &lt;chr&gt;          &lt;dbl&gt;
+1 accuracy multiclass     0.254</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb40"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Secondary Type Accuracy</span></span>
+<span id="cb40-2"><a href="#cb40-2" aria-hidden="true" tabindex="-1"></a><span class="fu">accuracy</span>(</span>
+<span id="cb40-3"><a href="#cb40-3" aria-hidden="true" tabindex="-1"></a>  type_2_results,</span>
+<span id="cb40-4"><a href="#cb40-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">truth =</span> type_2,</span>
+<span id="cb40-5"><a href="#cb40-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">estimate =</span> .pred_class</span>
+<span id="cb40-6"><a href="#cb40-6" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 1 × 3
+  .metric  .estimator .estimate
+  &lt;chr&gt;    &lt;chr&gt;          &lt;dbl&gt;
+1 accuracy multiclass     0.246</code></pre>
+</div>
+</div>
+<p>As you can see, for both predicting Primary types, and predicting Secondary types, when the Pokemon did have a secondary that is, we are around an accuracy of 25%. That is pretty bad but considering there is 18 whole different types, and we are predicting based off of just base stats and not anything else like colors, physical features, egg types, height and weights, I would say 25% is not too bad. Next I have some pretty Confusion Matrices that easily visualize these predictions.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb42"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Primary Type Confusion Matrix</span></span>
+<span id="cb42-2"><a href="#cb42-2" aria-hidden="true" tabindex="-1"></a><span class="fu">conf_mat</span>(</span>
+<span id="cb42-3"><a href="#cb42-3" aria-hidden="true" tabindex="-1"></a>  type_1_results,</span>
+<span id="cb42-4"><a href="#cb42-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">truth =</span> type_1,</span>
+<span id="cb42-5"><a href="#cb42-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">estimate =</span> .pred_class</span>
+<span id="cb42-6"><a href="#cb42-6" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span></span>
+<span id="cb42-7"><a href="#cb42-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">autoplot</span>(<span class="at">type =</span> <span class="st">"heatmap"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="final_project_files/figure-html/Confusion Matrix-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb43"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Secondary Type Confusion Matrix</span></span>
+<span id="cb43-2"><a href="#cb43-2" aria-hidden="true" tabindex="-1"></a><span class="fu">conf_mat</span>(</span>
+<span id="cb43-3"><a href="#cb43-3" aria-hidden="true" tabindex="-1"></a>  type_2_results,</span>
+<span id="cb43-4"><a href="#cb43-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">truth =</span> type_2,</span>
+<span id="cb43-5"><a href="#cb43-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">estimate =</span> .pred_class</span>
+<span id="cb43-6"><a href="#cb43-6" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span></span>
+<span id="cb43-7"><a href="#cb43-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">autoplot</span>(<span class="at">type =</span> <span class="st">"heatmap"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="final_project_files/figure-html/Confusion Matrix-2.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>There is much commentary to be made on this heat map, but I fear there is not enough time, space, or reader interest to include this myself. One I could mention is that for example, the Normal primary type, the model was good, it nailed that prediction, 12 out of 17 times. However, it made too many Normal predictions, 37 to be exact. So 70.58% of Normal types were predicted correctly, but 32.43% of the models prediction of a Pokemon being a normal type, was wrong. Those are the type of comments and observations that could be made. We see a similar pattern with Flying Secondary types. These kind of things are what I believe is the byproduct of the type imbalances I mentioned earlier.</p>
 </section>
-<section id="insightsconclusion" class="level2">
-<h2 class="anchored" data-anchor-id="insightsconclusion">Insights/Conclusion</h2>
-<p>Pick either “Insights” or “Conclusion” as the section title depending on what makes more sense.</p>
-<p>Describe the primary findings from your EDA and modeling sections as appropriate to the main question/objective. You can reproduce the figure from your summary if that helps.</p>
+<section id="conclusion" class="level2">
+<h2 class="anchored" data-anchor-id="conclusion">Conclusion</h2>
+<p>Overall, the main takeaway from this project is that Pokemon base stats do carry some information about typing, but not enough to make great accurate predictions on their own. From the EDA, we saw clear patterns between certain types and specific stats.</p>
+<p>However, when it came to actually predicting a Pokemon’s primary or secondary type using Multinomial Logistic Regression, the results were limited. The model achieved around 25% accuracy, which is better than random guessing across 18 types, but still not strong enough to be considered reliable. This suggests that while base stats are related to type, they do not determine it.</p>
+<p>One important reason for this limitation is that Pokemon typing is not based purely on base stats. Types are influenced by game design decisions and balance. Because of this, there is a lot of overlap between types and many different types can share similar stats. This makes it very difficult for a model to clearly identify and separate types using only base stats.</p>
+<p>In conclusion, this project shows that there is a some relationship between Pokemon types and base stats. This relationship is strong enough to create patterns and slightly better than random predictions, but not strong enough for precise classification.</p>
 <section id="limitations-and-future-work" class="level3">
 <h3 class="anchored" data-anchor-id="limitations-and-future-work">Limitations and Future Work</h3>
-<p>This section should include further exploration of the limitations of your modeling approach. Some avenues of exploration include:</p>
-<ul>
-<li>Who/what is being poorly predicted by your model? Why?</li>
-<li>How might someone improve the data collection or analysis in the future?</li>
-<li>Are the assumptions behind your analytical methods justified?</li>
-<li>Are there ethical concerns about how the data was collected or how the results of the analysis could be used in the real world?</li>
-</ul>
-</section>
-</section>
-<section id="extra-credit" class="level2">
-<h2 class="anchored" data-anchor-id="extra-credit">Extra Credit</h2>
-<p>If you went to any off-campus events this semester that involved statistics or math in some way (e.g., DataFest, GSB off-campus events, etc.) or attended on-campus events that brought in potential future colleagues/mentors from off-campus (e.g., grad school/career fairs, TSC events, etc.), you can write a paragraph at the end of the reflection telling me what you went to and what you got out of it (if it was a waste of time, tell me why).</p>
-<p>For each paragraph, you get an extra 5 points on this assignment, up to 20 points.</p>
+<p>One of the main limitations is that base stats alone are not enough information to fully explain or predict Pokemon typing. Types are designed using a mix of gameplay balance, aesthetics, plot, and intended roles in battle, not just numerical stats. Because of this, we face a lot of overlap between types, which makes classification difficult for any statistical model.</p>
+<p>Another major issue is class imbalance. Some types, such as Water and Normal, appear very frequently in the dataset, while others like Dragon or Ice appear much less often. This creates bias in both the model and predictions, since the model has far fewer examples to learn from for rare types. This is made visible in the confusion matrices, where the model tends to over-predict more common types and struggle with less frequent ones.</p>
+<p>For reference in future work, I was made aware it was actually a great idea to include hp and weight into the model. However, direct plug in to the recipe wasn’t the best way to do it, and lack of time prevented me from truly exploring this idea. Time was a limitation, I am sure if I included these variables the right way, our prediction could have gotten a bit more accurate</p>
+<p>As for the dataset itself, there is really no way to improve data collection, all the stats we need are in the data. I believe there are no ethical concerns about how this data was collected or how the results can be used. Information is picked up directly from the games from dedicated fans, and the analysis does nothing but maybe help a player strategize their playthrough in some way. This is due to the fact that this is just a nerdy and mathematical look into Pokemon, surely nothing crazy could happen.</p>
 
 
+</section>
 </section>
 
 </main> <!-- /main -->
